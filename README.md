@@ -29,6 +29,6 @@ yarn start
 yarn make
 ```
 
-I build with yarn 1.22.22 and node v20.18.1. You can try using `yarn install --frozen-lockfile --ignore-engines` if you end up with dependency errors.
+Recommended toolchain is Yarn 4.12.0 (via Corepack) and Node.js v24.13.0+ (LTS line). Install with `corepack enable && corepack prepare yarn@4.12.0 --activate`, then use `yarn install --immutable`.
 
 Note that yarn start does hot-reloading, but hot-reloading files related to the main Electron process (basically index.ts, the stuff related to the OS and files) won't work but hot-reloading the renderer process works (basically everything user facing).
