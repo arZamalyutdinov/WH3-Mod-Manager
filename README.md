@@ -29,6 +29,17 @@ yarn start
 yarn make
 ```
 
+## Windows release artifacts
+
+Each tagged Windows release now publishes:
+
+- `*.zip`: portable package output from Electron Forge.
+- `WH3MM-Installer-vX.Y.Z.exe`: bootstrap installer that:
+  - downloads the matching release zip from GitHub Releases,
+  - installs to a user-selected directory,
+  - optionally creates desktop and Start Menu shortcuts,
+  - registers an uninstaller entry in Windows ("Installed apps").
+
 Recommended toolchain is Yarn 4.12.0 (via Corepack) and Node.js v24.13.0+ (LTS line). Install with `corepack enable && corepack prepare yarn@4.12.0 --activate`, then use `yarn install --immutable`.
 
 Note that yarn start does hot-reloading, but hot-reloading files related to the main Electron process (basically index.ts, the stuff related to the OS and files) won't work but hot-reloading the renderer process works (basically everything user facing).

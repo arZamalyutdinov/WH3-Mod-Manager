@@ -8,6 +8,8 @@ const {
   getLatestReleaseApiUrl,
   getGithubRepositoryUrl,
   isZipReleaseAsset,
+  isWindowsInstallerReleaseAsset,
+  pickPreferredReleaseAsset,
 } = require("../src/utility/githubRepo.ts");
 
 test("getReleaseRepository returns default when env is unset", () => {
@@ -51,4 +53,38 @@ test("isZipReleaseAsset accepts zip content types and fallback extensions", () =
   assert.equal(isZipReleaseAsset({ browser_download_url: "https://example.com/release.zip" }), true);
   assert.equal(isZipReleaseAsset({ name: "WH3MM-Windows.zip" }), true);
   assert.equal(isZipReleaseAsset({ content_type: "application/octet-stream", name: "release.bin" }), false);
+});
+
+test("isWindowsInstallerReleaseAsset detects installer executables", () => {
+  assert.equal(
+    isWindowsInstallerReleaseAsset({ name: "WH3MM-Installer-v2.17.8.exe", content_type: "application/octet-stream" }),
+    true
+  );
+  assert.equal(
+    isWindowsInstallerReleaseAsset({
+      browser_download_url: "https://github.com/example/repo/releases/download/v1/wh3mm-setup.exe",
+    }),
+    true
+  );
+  assert.equal(
+    isWindowsInstallerReleaseAsset({ content_type: "application/vnd.microsoft.portable-executable" }),
+    true
+  );
+  assert.equal(isWindowsInstallerReleaseAsset({ name: "wh3mm-win32-x64.zip" }), false);
+  assert.equal(isWindowsInstallerReleaseAsset({ name: "portable.exe" }), false);
+});
+
+test("pickPreferredReleaseAsset prioritizes installer over zip and falls back to zip", () => {
+  const zipAsset = {
+    name: "wh3mm-win32-x64-2.17.8.zip",
+    browser_download_url: "https://example.com/wh3mm-win32-x64-2.17.8.zip",
+  };
+  const installerAsset = {
+    name: "WH3MM-Installer-v2.17.8.exe",
+    browser_download_url: "https://example.com/WH3MM-Installer-v2.17.8.exe",
+  };
+
+  assert.deepEqual(pickPreferredReleaseAsset([zipAsset, installerAsset]), installerAsset);
+  assert.deepEqual(pickPreferredReleaseAsset([zipAsset]), zipAsset);
+  assert.equal(pickPreferredReleaseAsset([]), undefined);
 });

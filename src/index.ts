@@ -18,7 +18,7 @@ import { windows, registerIpcMainListeners } from "./ipcMainListeners";
 import * as https from "https";
 import { Extract } from "unzipper";
 import { isSupportedLanguage } from "./utility/sharedHelpers";
-import { getLatestReleaseApiUrl, getReleaseRepository, isZipReleaseAsset } from "./utility/githubRepo";
+import { getLatestReleaseApiUrl, getReleaseRepository, pickPreferredReleaseAsset } from "./utility/githubRepo";
 
 //-------------- HOT RELOAD DOESN'T RELOAD INDEX.TS
 
@@ -259,16 +259,14 @@ if (!gotTheLock) {
       await fetch(getLatestReleaseApiUrl(releaseRepository))
         .then((res) => res.json())
         .then((body) => {
-          body.assets.forEach((asset: { content_type: string; browser_download_url: string }) => {
-            const isZipAsset = isZipReleaseAsset(asset);
-            windows.mainWindow?.webContents.send("handleLog", isZipAsset);
-            if (isZipAsset) {
-              modUpdatedExists = {
-                updateExists: true,
-                downloadURL: asset.browser_download_url,
-              } as ModUpdateExists;
-            }
-          });
+          const assets = Array.isArray(body.assets) ? body.assets : [];
+          const preferredAsset = pickPreferredReleaseAsset(assets);
+          if (preferredAsset?.browser_download_url) {
+            modUpdatedExists = {
+              updateExists: true,
+              downloadURL: preferredAsset.browser_download_url,
+            } as ModUpdateExists;
+          }
 
           if (body.html_url) modUpdatedExists.releaseNotesURL = body.html_url;
         })
@@ -287,7 +285,19 @@ if (!gotTheLock) {
       try {
         const appPath = app.getAppPath();
         const tempDir = nodePath.join(appPath, "../..", "temp_update");
-        const zipPath = nodePath.join(tempDir, "update.zip");
+        const appDir = nodePath.dirname(nodePath.join(appPath, ".."));
+        const normalizedDownloadPathname = (() => {
+          try {
+            return new URL(downloadURL).pathname.toLowerCase();
+          } catch {
+            return downloadURL.toLowerCase();
+          }
+        })();
+        const isInstallerDownload = normalizedDownloadPathname.endsWith(".exe");
+        const downloadedFilePath = nodePath.join(
+          tempDir,
+          isInstallerDownload ? "update-installer.exe" : "update.zip"
+        );
 
         // Create temp directory
         if (!fs.existsSync(tempDir)) {
@@ -301,8 +311,12 @@ if (!gotTheLock) {
             https
               .get(url, (response) => {
                 if (response.statusCode === 302 || response.statusCode === 301) {
-                  // Handle redirect
-                  return downloadFile(response.headers.location!, dest, file).then(resolve).catch(reject);
+                  const redirectLocation = response.headers.location;
+                  if (!redirectLocation) {
+                    reject(new Error("Update download redirect did not contain a location header."));
+                    return;
+                  }
+                  return downloadFile(redirectLocation, dest, file).then(resolve).catch(reject);
                 }
 
                 response.on("end", () => {
@@ -312,28 +326,76 @@ if (!gotTheLock) {
                 response.pipe(file);
               })
               .on("error", (err) => {
-                fs.unlink(dest, () => {}); // Delete the file async
+                fs.unlink(dest, () => undefined); // Delete the file async
                 reject(err);
               });
           });
         };
 
-        if (fs.existsSync(zipPath)) {
-          fs.rmSync(zipPath);
+        if (fs.existsSync(downloadedFilePath)) {
+          fs.rmSync(downloadedFilePath);
         }
-        await downloadFile(downloadURL, zipPath);
+        await downloadFile(downloadURL, downloadedFilePath);
 
-        // Extract the zip file to a staging directory
+        if (isInstallerDownload) {
+          const result = await dialog.showMessageBox(windows.mainWindow!, {
+            type: "info",
+            title: i18n.t("updateReady"),
+            message: i18n.t("updateReadyMessage"),
+            buttons: [i18n.t("updateNow"), i18n.t("cancel")],
+          });
+
+          if (result.response === 0) {
+            const escapedInstallerPath = downloadedFilePath.replace(/'/g, "''");
+            const installerLaunchScript = nodePath.join(tempDir, "run-installer-update.bat");
+            const processId = process.pid;
+            const scriptContent = `@echo off
+              echo Waiting for application to close...
+              :wait_loop
+              tasklist /FI "PID eq ${processId}" | find "${processId}" >nul
+              if errorlevel 1 goto continue_update
+              timeout /t 1 /nobreak >nul
+              goto wait_loop
+
+              :continue_update
+              echo Launching installer...
+              powershell -NoProfile -ExecutionPolicy Bypass -Command "Start-Process -FilePath '${escapedInstallerPath}'"
+              if errorlevel 1 (
+                  echo Failed to launch installer.
+                  pause
+                  exit /b 1
+              )
+              timeout /t 2 /nobreak >nul
+              del "%~f0"
+              exit /b`;
+
+            fs.writeFileSync(installerLaunchScript, scriptContent);
+
+            const subprocess = spawn(`start cmd.exe /c run-installer-update.bat`, [], {
+              cwd: tempDir,
+              shell: true,
+              detached: true,
+              windowsHide: true,
+            });
+            subprocess.unref();
+            app.quit();
+          } else {
+            fs.rmSync(tempDir, { recursive: true, force: true });
+          }
+
+          return { success: true };
+        }
+
+        // Extract the zip file to a staging directory (legacy update path fallback)
         const stagingDir = nodePath.join(tempDir, "staging");
         await new Promise<void>((resolve, reject) => {
-          fs.createReadStream(zipPath)
+          fs.createReadStream(downloadedFilePath)
             .pipe(Extract({ path: stagingDir }))
             .on("close", resolve)
             .on("error", reject);
         });
 
         // Create update script
-        const appDir = nodePath.dirname(nodePath.join(appPath, ".."));
         const updateScript = nodePath.join(tempDir, "update.bat");
         const appExeName = nodePath.basename(process.execPath);
 
@@ -356,7 +418,9 @@ if (!gotTheLock) {
               exit /b 1
           )
           echo Update complete! Starting application...
-          powershell "start \"${nodePath.join(appDir, appExeName)}\""
+          powershell -NoProfile -ExecutionPolicy Bypass -Command "Start-Process -FilePath '${nodePath
+            .join(appDir, appExeName)
+            .replace(/'/g, "''")}'"
           echo Cleaning up...
           timeout /t 2 /nobreak >nul
           rd /s /q "${tempDir}"

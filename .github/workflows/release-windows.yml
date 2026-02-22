@@ -115,11 +115,58 @@ jobs:
         run: |
           Get-ChildItem -Path out/make -Recurse | Select-Object FullName
 
+      - name: Resolve Windows zip metadata
+        id: zipmeta
+        shell: pwsh
+        run: |
+          $zip = Get-ChildItem -Path "out/make/zip/win32" -Recurse -Filter "*.zip" | Select-Object -First 1
+          if (-not $zip) {
+            throw "No Windows zip release asset was generated in out/make/zip/win32."
+          }
+
+          "zip_path=$($zip.FullName)" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+          "zip_name=$($zip.Name)" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+          Write-Host "Resolved zip asset: $($zip.Name)"
+
+      - name: Ensure NSIS is available
+        shell: pwsh
+        run: |
+          if (-not (Get-Command makensis -ErrorAction SilentlyContinue)) {
+            choco install nsis -y --no-progress
+            "C:\Program Files (x86)\NSIS" | Out-File -FilePath $env:GITHUB_PATH -Append -Encoding utf8
+          }
+          makensis /VERSION
+
+      - name: Build Windows bootstrap installer
+        shell: pwsh
+        env:
+          RELEASE_TAG: ${{ steps.meta.outputs.tag }}
+          RELEASE_REPOSITORY: ${{ github.repository }}
+          RELEASE_ZIP_ASSET: ${{ steps.zipmeta.outputs.zip_name }}
+        run: |
+          $version = $env:RELEASE_TAG.TrimStart("v")
+          New-Item -ItemType Directory -Path "out/installer" -Force | Out-Null
+
+          makensis `
+            "/DAPP_VERSION=$version" `
+            "/DRELEASE_TAG=$env:RELEASE_TAG" `
+            "/DRELEASE_REPOSITORY=$env:RELEASE_REPOSITORY" `
+            "/DRELEASE_ZIP_ASSET=$env:RELEASE_ZIP_ASSET" `
+            "/DOUT_FILE=out/installer/WH3MM-Installer-$env:RELEASE_TAG.exe" `
+            "installer/windows/wh3mm-bootstrapper.nsi"
+
+      - name: List installer outputs
+        shell: pwsh
+        run: |
+          Get-ChildItem -Path out/installer -Recurse | Select-Object FullName
+
       - name: Upload workflow artifact
         uses: actions/upload-artifact@v4
         with:
           name: wh3mm-windows-${{ steps.meta.outputs.tag }}
-          path: out/make/zip/win32/**/*.zip
+          path: |
+            out/make/zip/win32/**/*.zip
+            out/installer/*.exe
           if-no-files-found: error
 
       - name: Publish GitHub release assets
@@ -128,5 +175,7 @@ jobs:
           tag_name: ${{ steps.meta.outputs.tag }}
           target_commitish: ${{ github.sha }}
           generate_release_notes: true
-          files: out/make/zip/win32/**/*.zip
+          files: |
+            out/make/zip/win32/**/*.zip
+            out/installer/*.exe
           fail_on_unmatched_files: true
