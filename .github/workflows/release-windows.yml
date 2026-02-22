@@ -124,9 +124,12 @@ jobs:
             throw "No Windows zip release asset was generated in out/make/zip/win32."
           }
 
+          $zipSizeKb = [int][Math]::Ceiling($zip.Length / 1KB)
           "zip_path=$($zip.FullName)" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
           "zip_name=$($zip.Name)" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+          "zip_size_kb=$zipSizeKb" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
           Write-Host "Resolved zip asset: $($zip.Name)"
+          Write-Host "Resolved zip size (KB): $zipSizeKb"
 
       - name: Ensure NSIS is available
         id: nsis
@@ -165,6 +168,7 @@ jobs:
           RELEASE_TAG: ${{ steps.meta.outputs.tag }}
           RELEASE_REPOSITORY: ${{ github.repository }}
           RELEASE_ZIP_ASSET: ${{ steps.zipmeta.outputs.zip_name }}
+          RELEASE_ZIP_SIZE_KB: ${{ steps.zipmeta.outputs.zip_size_kb }}
         run: |
           $version = $env:RELEASE_TAG.TrimStart("v")
           $repoRoot = if ($env:GITHUB_WORKSPACE) { $env:GITHUB_WORKSPACE } else { (Get-Location).Path }
@@ -181,6 +185,7 @@ jobs:
             "/DRELEASE_TAG=$env:RELEASE_TAG" `
             "/DRELEASE_REPOSITORY=$env:RELEASE_REPOSITORY" `
             "/DRELEASE_ZIP_ASSET=$env:RELEASE_ZIP_ASSET" `
+            "/DRELEASE_ZIP_SIZE_KB=$env:RELEASE_ZIP_SIZE_KB" `
             "/DOUT_FILE=$installerOutFile" `
             $nsisScript
 
