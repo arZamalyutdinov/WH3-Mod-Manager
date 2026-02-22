@@ -38,85 +38,7 @@ import { WindowScroller, AutoSizer, List, CellMeasurerCache, CellMeasurer } from
 import { MeasuredCellParent } from "react-virtualized/dist/es/CellMeasurer";
 import { GridCoreProps } from "react-virtualized/dist/es/Grid";
 import { buildCustomizableModsSignature } from "../utility/signatureHelpers";
-
-let currentDragTarget: Element;
-let idOfDragged = "";
-
-const onDragEnd = () => {
-  console.log("onDragEnd");
-
-  // console.log("on drag end height", rowsParentRef.current?.clientHeight);
-  // console.log("on drag end height", rowsParentRef.current?.getBoundingClientRect());
-  // console.log("on drag end height", rowsParentRef.current?.scrollTop);
-  console.log("on drag end SCR 1", document.scrollingElement?.scrollTop);
-
-  // const ghost = document.getElementById("drop-ghost");
-  // if (ghost && ghost.parentElement) {
-  //   ghost.parentElement.removeChild(ghost);
-  // }
-
-  // console.log("idOfDragged");
-  console.log(idOfDragged);
-  // console.log("111");
-  let oldTop = -1;
-  const originalElement = (idOfDragged != "" && document.getElementById(idOfDragged)) || null;
-  // // console.log("orig", !!originalElement, !!originalElement?.parentElement);
-  // // if (!originalElement || !originalElement.parentElement) return;
-  // const oldTop = originalElement?.getBoundingClientRect().top;
-  // console.log(originalElement?.getBoundingClientRect(), oldTop);
-  // console.log(originalElement?.offsetTop);
-  if (originalElement && originalElement.children[1]) {
-    console.log("first child rect", originalElement?.children[1].getBoundingClientRect());
-
-    oldTop = originalElement.children[1].getBoundingClientRect().top;
-  }
-
-  [...document.getElementsByClassName("row-bg-color-manually")].forEach((element) => {
-    element.classList.remove("row-bg-color-manually");
-  });
-
-  const body = document.getElementById("body");
-  if (body) body.classList.remove("disable-row-hover");
-  // e.stopPropagation();
-
-  setTimeout(() => {
-    const modsGrid = document.getElementById("modsGrid");
-    if (modsGrid) {
-      const ghosts = modsGrid.getElementsByClassName("drop-ghost");
-      for (const ghost of ghosts) {
-        if (!ghost.classList.contains("hidden")) {
-          //     console.log("found one");
-          //     console.log(e?.clientY);
-          //     console.log(ghost.getBoundingClientRect());
-          ghost.classList.add("hidden");
-        }
-      }
-    }
-
-    setTimeout(() => {
-      const originalElement = (idOfDragged != "" && document.getElementById(idOfDragged)) || null;
-      // // console.log("orig", !!originalElement, !!originalElement?.parentElement);
-      // // if (!originalElement || !originalElement.parentElement) return;
-      // const oldTop = originalElement?.getBoundingClientRect().top;
-      // console.log(originalElement?.getBoundingClientRect(), oldTop);
-      // console.log(originalElement?.offsetTop);
-      if (oldTop != -1 && originalElement && originalElement.children[1]) {
-        console.log("first child rect AFTER", originalElement?.children[1].getBoundingClientRect());
-        const newTop = originalElement.children[1].getBoundingClientRect().top;
-
-        document.getElementById("mod-rows-scroll")?.scrollBy(0, newTop - oldTop);
-      }
-
-      // console.log("on drag end SCR 2", document.scrollingElement?.scrollTop);
-      // const newTop = originalElement?.getBoundingClientRect().top;
-      // console.log("oldtop", oldTop, "newtop", newTop);
-      // if (oldTop && newTop) {
-      //   window.scrollBy(0, newTop - oldTop);
-      //   console.log("scrolled by", newTop - oldTop);
-      // }
-    }, 50);
-  }, 100);
-};
+import { getDragAutoScrollDelta } from "../utility/dragAutoScroll";
 
 const MemoizedFloatingOverlay = memo(FloatingOverlay);
 
@@ -151,6 +73,56 @@ const ModRows = memo((props: ModRowsProps) => {
 
   const rowsParentRef = useRef<HTMLDivElement>(null);
   const listRef = useRef<List>(null);
+  const draggedModIdRef = useRef<string>("");
+  const dragCurrentTargetRef = useRef<Element | null>(null);
+  const dragStartTopRef = useRef<number | null>(null);
+  const dragScrollRafRef = useRef<number | null>(null);
+  const pendingAutoScrollDeltaRef = useRef<number>(0);
+
+  const getModRowsScrollElement = useCallback(() => document.getElementById("mod-rows-scroll"), []);
+
+  const setDropGhostsVisible = useCallback((isVisible: boolean) => {
+    const modsGrid = document.getElementById("modsGrid");
+    if (!modsGrid) return;
+    const ghosts = modsGrid.getElementsByClassName("drop-ghost");
+    for (const ghost of ghosts) {
+      ghost.classList.toggle("hidden", !isVisible);
+    }
+  }, []);
+
+  const restoreDraggedModViewportOffset = useCallback(() => {
+    const draggedId = draggedModIdRef.current;
+    const initialTop = dragStartTopRef.current;
+    if (!draggedId || initialTop == null) return;
+
+    requestAnimationFrame(() => {
+      const draggedModElement = document.getElementById(draggedId);
+      if (!draggedModElement) return;
+      const currentTop = draggedModElement.getBoundingClientRect().top;
+      getModRowsScrollElement()?.scrollBy(0, currentTop - initialTop);
+    });
+  }, [getModRowsScrollElement]);
+
+  const clearDragUiState = useCallback(() => {
+    [...document.getElementsByClassName("row-bg-color-manually")].forEach((element) => {
+      element.classList.remove("row-bg-color-manually");
+    });
+    document.getElementById("body")?.classList.remove("disable-row-hover");
+    setDropGhostsVisible(false);
+    dragCurrentTargetRef.current = null;
+  }, [setDropGhostsVisible]);
+
+  const finalizeDrag = useCallback(() => {
+    if (dragScrollRafRef.current != null) {
+      cancelAnimationFrame(dragScrollRafRef.current);
+      dragScrollRafRef.current = null;
+    }
+    pendingAutoScrollDeltaRef.current = 0;
+    clearDragUiState();
+    restoreDraggedModViewportOffset();
+    draggedModIdRef.current = "";
+    dragStartTopRef.current = null;
+  }, [clearDragUiState, restoreDraggedModViewportOffset]);
 
   const alwaysEnabledModNames = useMemo(
     () => new Set(alwaysEnabledMods.map((mod) => mod.name)),
@@ -246,137 +218,39 @@ const ModRows = memo((props: ModRowsProps) => {
     dispatch(resetModLoadOrderAll());
   }, [dispatch]);
 
-  const afterDrop = useCallback((originalId: string, droppedOnId: string) => {
-    // console.log(`----DROPPED----`);
-    // console.log(`dragged id with ${originalId}`);
-    // console.log(`DROPPED ONTO ${droppedOnId}`);
-
-    const droppedOnElement = document.getElementById(droppedOnId);
-    if (!droppedOnElement || !droppedOnElement.parentElement) return;
-
-    const index =
-      [...droppedOnElement.parentElement.children]
-        .filter((ele) => ele.id !== "drop-ghost")
-        .indexOf(droppedOnElement) - 8;
-
-    const originalElement = document.getElementById(originalId);
-    if (!originalElement || !originalElement.parentElement) return;
-    const originalElementindex =
-      [...originalElement.parentElement.children]
-        .filter((ele) => ele.id !== "drop-ghost")
-        .indexOf(originalElement) - 8;
-
-    let loadOrder: number | null = null;
-
-    let prevElement: HTMLDivElement = droppedOnElement.previousElementSibling as HTMLDivElement;
-    if (prevElement.id === "drop-ghost") prevElement = prevElement.previousElementSibling as HTMLDivElement;
-    const prevElementOnLoadOrder = prevElement.dataset.loadOrder;
-
-    if (prevElementOnLoadOrder != null && prevElement.id !== originalId) {
-      loadOrder = Number(prevElementOnLoadOrder) + ((originalElementindex >= index && 1) || 0);
-
-      console.log("PREV ELEMENT LOAD ORDER!");
-      console.log("ORIG Y:", originalElementindex);
-      console.log("droppedOnElementY Y:", index);
-      console.log("OFFSET IS", (originalElementindex >= index && 1) || 0);
-      console.log("PREV ELEMENT DROPPED load order is: " + prevElementOnLoadOrder);
-      console.log("NEW LOAD ORDER IS", loadOrder);
-    }
-
-    const droppedOnLoadOrder = droppedOnElement.dataset.loadOrder;
-
-    if (
-      loadOrder == null &&
-      droppedOnLoadOrder != null &&
-      (prevElement.id !== originalId || Number(droppedOnLoadOrder) !== Number(prevElementOnLoadOrder) + 1)
-    ) {
-      console.log("NEXT ELEMENT LOAD ORDER!");
-      console.log("DROPPED ON LOAD ORDER IS", droppedOnLoadOrder);
-      console.log("ORIG Y:", originalElementindex);
-      console.log("droppedOnElementY Y:", index);
-      loadOrder = Number(droppedOnLoadOrder) + ((originalElementindex < index && -1) || 0);
-      console.log("NEW LOAD ORDER IS", loadOrder);
-      console.log("OFFSET IS", (originalElementindex < index && -1) || 0);
-    }
-
-    if (loadOrder == null) {
-      loadOrder = index > originalElementindex ? index : index + 1;
-    }
-
-    // console.log(`index is ${index}`);
-    // console.log(`orig index is ${originalElementindex}`);
-    // console.log(`loadOrder is ${loadOrder}`);
-    // console.log(`originalOrder is ${originalElementindex + 1}`);
-
-    // dispatch(setModLoadOrder({ modName: originalId, loadOrder, originalOrder }));
-  }, []);
-
-  const onDragStart = useCallback((e: React.DragEvent<HTMLDivElement>) => {
-    console.log("DRAG START");
-    const t = e.target as HTMLDivElement;
-
-    e.dataTransfer.effectAllowed = "move";
-    // console.log(`setting data ${t.id}`);
-    e.dataTransfer.setData("text/plain", t.id.replace("drag-icon-", ""));
-
-    console.log("idOfDragged");
-    console.log(t.id.replace("drag-icon-", ""));
-    console.log("111");
-    console.log(rowsParentRef.current?.clientHeight);
-    console.log(rowsParentRef.current?.scrollTop);
-    console.log(rowsParentRef.current?.getBoundingClientRect());
-    console.log("docu scroll", document.scrollingElement?.scrollTop);
-    const originalElement = (idOfDragged != "" && document.getElementById("rowsParent")) || null;
-    // console.log("orig", !!originalElement, !!originalElement?.parentElement);
-    // if (!originalElement || !originalElement.parentElement) return;
-    console.log(originalElement?.getBoundingClientRect());
-    console.log(originalElement?.offsetTop);
-
-    const body = document.getElementById("body");
-    if (body) body.classList.add("disable-row-hover");
-
-    // console.log(t.id.replace("drag-icon-", ""));
-    const row = document.getElementById(t.id.replace("drag-icon-", ""));
-    row?.classList.add("row-bg-color-manually");
-
-    // const elTop = t.offsetTop;
-    // const viewportHeight = window.innerHeight;
-
-    const viewportOffset = t.parentElement?.getBoundingClientRect();
-    const oldTop = viewportOffset?.top;
-    // these are relative to the viewport, i.e. the window
-
-    setTimeout(() => {
-      const modsGrid = document.getElementById("modsGrid");
-      if (modsGrid) {
-        const ghosts = modsGrid.getElementsByClassName("drop-ghost");
-        for (const ghost of ghosts) {
-          if (ghost.classList.contains("hidden")) ghost.classList.remove("hidden");
-        }
-      }
-      setTimeout(() => {
-        const newTop = t.parentElement?.getBoundingClientRect().top;
-        if (oldTop && newTop) document.getElementById("mod-rows-scroll")?.scrollBy(0, newTop - oldTop);
-
-        // t.parentElement?.scrollIntoView({ block: "center" });
-      }, 50);
-    }, 50);
-  }, []);
-
-  const onDragEnter = useCallback(
+  const onDragStart = useCallback(
     (e: React.DragEvent<HTMLDivElement>) => {
-      if (e.dataTransfer.types.length > 1) return;
-      const t = e.currentTarget as HTMLDivElement;
+      const target = e.target as HTMLElement | null;
+      const dragIcon = target?.closest<HTMLElement>("[id^='drag-icon-']");
+      const draggedModId = dragIcon?.id.replace("drag-icon-", "");
+      if (!draggedModId) return;
 
-      if (currentDragTarget && t === currentDragTarget.parentElement) return;
+      draggedModIdRef.current = draggedModId;
+      e.dataTransfer.effectAllowed = "move";
+      e.dataTransfer.setData("text/plain", draggedModId);
 
-      // console.log("DRAG ENTER");
-      currentDragTarget = t.children[0];
+      const draggedModElement = document.getElementById(draggedModId);
+      dragStartTopRef.current = draggedModElement?.getBoundingClientRect().top ?? null;
+      draggedModElement?.classList.add("row-bg-color-manually");
+      document.getElementById("body")?.classList.add("disable-row-hover");
 
-      e.stopPropagation();
+      setDropGhostsVisible(true);
+      restoreDraggedModViewportOffset();
     },
-    []
+    [restoreDraggedModViewportOffset, setDropGhostsVisible]
   );
+
+  const onDragEnd = useCallback(() => {
+    finalizeDrag();
+  }, [finalizeDrag]);
+
+  const onDragEnter = useCallback((e: React.DragEvent<HTMLDivElement>) => {
+    if (e.dataTransfer.types.length > 1) return;
+    const row = e.currentTarget;
+    if (dragCurrentTargetRef.current && row === dragCurrentTargetRef.current.parentElement) return;
+    dragCurrentTargetRef.current = row.children[0] ?? null;
+    e.stopPropagation();
+  }, []);
 
   const onDragLeave = useCallback(() => {
     // no-op: retained for drag lifecycle parity with row handlers
@@ -389,81 +263,65 @@ const ModRows = memo((props: ModRowsProps) => {
     // return false;
   }, []);
 
-  const onDrop = useCallback((visualModList: Mod[]) => {
-    return (e: React.DragEvent<HTMLDivElement>, setAfterMod = false) => {
-      try {
-        console.log("onDrop");
-        // console.log(`dragged id with ${e.dataTransfer.getData("text/plain")}`);
-        const droppedId = e.dataTransfer.getData("text/plain");
-        if (droppedId === "") return;
-        idOfDragged = droppedId;
+  const onDrop = useCallback(
+    (visualModList: Mod[]) => {
+      return (e: React.DragEvent<HTMLDivElement>, setAfterMod = false) => {
+        try {
+          e.preventDefault();
+          const droppedId = e.dataTransfer.getData("text/plain") || draggedModIdRef.current;
+          if (!droppedId) return;
+          draggedModIdRef.current = droppedId;
 
-        console.log("in ondrop droppedID", droppedId);
-
-        const t = e.currentTarget as HTMLDivElement;
-        console.log(`DROPPED ONTO ${t.id}`);
-        // console.log(`DROPPED ONTO`, t);
-
-        if (t.classList.contains("drop-ghost")) {
-          console.log("dropped onto ghost");
-          // if (!t.parentElement || t.parentElement?.id != droppedId) return;
-          if (!t.parentElement) return;
-
-          // console.log("droppend on top ghost");
-          // console.log("first", t.parentElement?.id);
-          // console.log("first", droppedId);
-          // console.log(22);
-          // console.log("nextElementSibling:", t.parentElement?.nextElementSibling);
-          // console.log(2233);
-          const modNameRelativeTo = t.parentElement?.id;
-          if (modNameRelativeTo) {
-            e.defaultPrevented = true;
-            e.stopPropagation();
-            dispatch(
-              setModLoadOrderRelativeTo({
-                modNameToChange: droppedId,
-                modNameRelativeTo,
-                visualModList,
-                setAfterMod,
-              } as ModLoadOrderRelativeTo)
-            );
-            afterDrop(droppedId, modNameRelativeTo);
+          const target = e.currentTarget;
+          if (target.classList.contains("drop-ghost")) {
+            if (!target.parentElement) return;
+            const modNameRelativeTo = target.parentElement.id;
+            if (modNameRelativeTo) {
+              e.stopPropagation();
+              dispatch(
+                setModLoadOrderRelativeTo({
+                  modNameToChange: droppedId,
+                  modNameRelativeTo,
+                  visualModList,
+                  setAfterMod,
+                } as ModLoadOrderRelativeTo)
+              );
+            }
+            return;
           }
-          return;
-        }
 
-        if (droppedId === t.id) return;
-        // console.log("isBottomDrop: " + isBottomDrop);
-        // if (!t.nextElementSibling) return;
-        dispatch(
-          setModLoadOrderRelativeTo({
-            modNameToChange: droppedId,
-            modNameRelativeTo: t.id,
-            visualModList,
-            setAfterMod,
-          } as ModLoadOrderRelativeTo)
-        );
-      } catch (e) {
-        console.log(e);
-      }
-      // onDragEnd();
-      // e.stopPropagation();
-    };
-  }, [afterDrop, dispatch]);
+          if (droppedId === target.id) return;
+          dispatch(
+            setModLoadOrderRelativeTo({
+              modNameToChange: droppedId,
+              modNameRelativeTo: target.id,
+              visualModList,
+              setAfterMod,
+            } as ModLoadOrderRelativeTo)
+          );
+        } catch (e) {
+          console.log(e);
+        }
+      };
+    },
+    [dispatch]
+  );
 
   const onDrag = useCallback(
     (e: React.DragEvent<HTMLDivElement>) => {
-      if (e.clientY < 150) {
-        const yRatio = e.clientY / 150;
-        document.getElementById("mod-rows-scroll")?.scrollBy(0, -(20 * yRatio + 60 * (1 - yRatio)));
-      }
+      const autoScrollDelta = getDragAutoScrollDelta(e.clientY, window.innerHeight);
+      pendingAutoScrollDeltaRef.current = autoScrollDelta;
 
-      if (e.clientY > innerHeight - 75) {
-        const yRatio = (e.clientY - (innerHeight - 75)) / 75;
-        document.getElementById("mod-rows-scroll")?.scrollBy(0, 60 * yRatio + 20 * (1 - yRatio));
-      }
+      if (dragScrollRafRef.current != null) return;
+
+      dragScrollRafRef.current = requestAnimationFrame(() => {
+        dragScrollRafRef.current = null;
+        const delta = pendingAutoScrollDeltaRef.current;
+        if (delta === 0) return;
+        getModRowsScrollElement()?.scrollBy(0, delta);
+      });
     },
-    []
+    [getModRowsScrollElement]
   );
 
   const onRowHoverStart = useCallback(
@@ -618,6 +476,18 @@ const ModRows = memo((props: ModRowsProps) => {
     listRef.current?.recomputeRowHeights();
   }, [visibleMods]);
 
+  useEffect(() => {
+    return () => {
+      if (dragScrollRafRef.current != null) {
+        cancelAnimationFrame(dragScrollRafRef.current);
+      }
+      pendingAutoScrollDeltaRef.current = 0;
+      clearDragUiState();
+      draggedModIdRef.current = "";
+      dragStartTopRef.current = null;
+    };
+  }, [clearDragUiState]);
+
   const Row = useCallback(
     ({
       index,
@@ -684,6 +554,7 @@ const ModRows = memo((props: ModRowsProps) => {
       onDragLeave,
       onDragEnter,
       onDragOver,
+      onDragEnd,
       onModToggled,
       onModRightClick,
       onCustomizeModClicked,
@@ -701,7 +572,7 @@ const ModRows = memo((props: ModRowsProps) => {
   return (
     <>
       <div
-        onDragEnd={() => onDragEnd()}
+        onDragEnd={onDragEnd}
         className={`dark:text-slate-100 ` + (areThumbnailsEnabled ? "text-lg" : "")}
         id="rowsParent"
         ref={rowsParentRef}

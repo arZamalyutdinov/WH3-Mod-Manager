@@ -630,6 +630,7 @@ const Categories = memo(() => {
       setHiddenCategories([]);
     }
   };
+  const selectMenuPortalTarget = typeof document !== "undefined" ? document.body : null;
 
   return (
     <>
@@ -671,6 +672,8 @@ const Categories = memo(() => {
                 className=" w-10/12"
                 options={options}
                 styles={selectStyle}
+                menuPortalTarget={selectMenuPortalTarget}
+                menuPosition="fixed"
                 onChange={onSelectCategoryChange}
                 onCreateOption={(name) => onCreateNewCategory(name)}
               ></Creatable>

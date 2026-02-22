@@ -1,4 +1,4 @@
-import React, { memo, useContext, useEffect } from "react";
+import React, { memo, useCallback, useContext, useEffect, useMemo } from "react";
 import { Tab, TabList, TabPanel, Tabs } from "react-tabs";
 import "../styles/LeftSidebar.css";
 import { IoIosList, IoMdCheckboxOutline } from "react-icons/io";
@@ -7,42 +7,43 @@ import { FaProjectDiagram } from "react-icons/fa";
 import { useAppDispatch, useAppSelector } from "../hooks";
 import { setCurrentTab } from "../appSlice";
 import localizationContext from "../localizationContext";
-
-// const Tab = () => {}
-
-const tabIndexToTabType: MainWindowTab[] = ["mods", "enabledMods", "categories", "nodeEditor"];
+import { getMainWindowTabFromHotkey, getVisibleMainWindowTabs } from "../utility/uiStateHelpers";
 
 const LeftSidebar = memo(() => {
   const dispatch = useAppDispatch();
   const currentTab = useAppSelector((state) => state.app.currentTab);
   const isFeaturesForModdersEnabled = useAppSelector((state) => state.app.isFeaturesForModdersEnabled);
 
-  const onTabSelected = (index: number) => {
-    const tabType = tabIndexToTabType[index];
-    console.log("setting tab", tabType);
-    dispatch(setCurrentTab(tabType));
-  };
+  const visibleTabs = useMemo(
+    () => getVisibleMainWindowTabs(isFeaturesForModdersEnabled),
+    [isFeaturesForModdersEnabled]
+  );
+
+  const onTabSelected = useCallback(
+    (index: number) => {
+      const tabType = visibleTabs[index];
+      if (!tabType) return;
+      dispatch(setCurrentTab(tabType));
+    },
+    [dispatch, visibleTabs]
+  );
 
   const localized: Record<string, string> = useContext(localizationContext);
 
   useEffect(() => {
+    if (!isFeaturesForModdersEnabled && currentTab === "nodeEditor") {
+      dispatch(setCurrentTab("mods"));
+    }
+  }, [currentTab, dispatch, isFeaturesForModdersEnabled]);
+
+  useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
-      if (e.ctrlKey) {
-        switch (e.key) {
-          case "1":
-            onTabSelected(0);
-            break;
-          case "2":
-            onTabSelected(1);
-            break;
-          case "3":
-            onTabSelected(2);
-            break;
-          case "4":
-            onTabSelected(3);
-            break;
-        }
-      }
+      if (!e.ctrlKey) return;
+      const tab = getMainWindowTabFromHotkey(e.key, isFeaturesForModdersEnabled);
+      if (!tab) return;
+
+      const selectedIndex = visibleTabs.findIndex((tabType) => tabType === tab);
+      if (selectedIndex >= 0) onTabSelected(selectedIndex);
     };
 
     document.addEventListener("keydown", onKeyDown);
@@ -50,15 +51,17 @@ const LeftSidebar = memo(() => {
     return () => {
       document.removeEventListener("keydown", onKeyDown);
     };
-  });
+  }, [isFeaturesForModdersEnabled, onTabSelected, visibleTabs]);
+
+  const selectedIndex = visibleTabs.findIndex((tabType) => tabType == currentTab);
 
   return (
     <>
       <Tabs
         id="left-sidebar"
-        className="fixed top-8 z-[200] left-0 outline-transparent parent-unhide-child select-none"
+        className="fixed top-10 z-[260] left-2 outline-transparent parent-unhide-child select-none"
         onSelect={(index) => onTabSelected(index)}
-        selectedIndex={tabIndexToTabType.findIndex((tabType) => tabType == currentTab)}
+        selectedIndex={selectedIndex >= 0 ? selectedIndex : 0}
       >
         <TabList>
           <Tab>

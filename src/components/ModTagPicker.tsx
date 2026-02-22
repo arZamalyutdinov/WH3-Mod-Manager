@@ -30,6 +30,7 @@ const ModTagPicker = memo(() => {
   const currentModToUpload = useAppSelector((state) => state.app.currentModToUpload);
 
   const [currentTag, setCurrentTag] = useState<string>("graphical");
+  const selectMenuPortalTarget = typeof document !== "undefined" ? document.body : null;
 
   const onUploadMod = () => {
     if (currentModToUpload) {
@@ -74,6 +75,8 @@ const ModTagPicker = memo(() => {
               <Select
                 options={options}
                 styles={selectStyle}
+                menuPortalTarget={selectMenuPortalTarget}
+                menuPosition="fixed"
                 onChange={onTagChange}
                 defaultValue={options[0]}
               ></Select>

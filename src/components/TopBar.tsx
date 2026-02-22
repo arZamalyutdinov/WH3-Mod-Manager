@@ -62,7 +62,7 @@ const TopBar = memo(() => {
         <img className="ml-1 h-[24px]" src={require("../assets/modmanager.ico")} />
         <span className="ml-1 font-light text-sm text-slate-100">{title}</span>
       </div>
-      <div id="top-bar" className="h-[28px] w-full"></div>
+      <div id="top-bar-spacer" aria-hidden="true" className="h-[28px] w-full"></div>
     </>
   );
 });

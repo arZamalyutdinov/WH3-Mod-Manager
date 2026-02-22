@@ -1,17 +1,10 @@
 import { Toast } from "flowbite-react";
-import React, { memo, useCallback, useContext, useEffect, useState } from "react";
+import React, { memo, useCallback, useContext, useEffect, useMemo, useState } from "react";
 import { HiCheck, HiOutlineInformationCircle, HiX } from "react-icons/hi";
 import { useAppDispatch, useAppSelector } from "../hooks";
 import { setToastDismissed } from "../appSlice";
 import localizationContext from "../localizationContext";
-
-const anyToastToShow = (toasts: Toast[]) => {
-  return toasts.some((toast) => Date.now() - toast.startTime < (toast.duration ?? 5000));
-};
-
-const unexpiredToasts = (toasts: Toast[]) => {
-  return toasts.filter((toast) => Date.now() - toast.startTime < (toast.duration ?? 5000));
-};
+import { getVisibleToastsAt, hasVisibleToastsAt } from "../utility/toastVisibility";
 
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 const getTestToasts = () => [
@@ -60,7 +53,7 @@ export const Toasts = memo(() => {
 
   const onToastClicked = useCallback((toast: Toast) => {
     dispatch(setToastDismissed(toast));
-  }, []);
+  }, [dispatch]);
 
   const getToastKey = useCallback((toast: Toast, index: number) => {
     if (toast.staticToastId) return toast.staticToastId;
@@ -69,23 +62,25 @@ export const Toasts = memo(() => {
 
   // const toasts = getTestToasts();
   const toasts = useAppSelector((state) => state.app.toasts);
+  const [nowMs, setNowMs] = useState(() => Date.now());
 
-  const [isShown, setIsShown] = useState(true);
-  if (!isShown && anyToastToShow(toasts)) setIsShown(true);
+  const visibleToasts = useMemo(() => getVisibleToastsAt(toasts, nowMs), [toasts, nowMs]);
+  const isShown = visibleToasts.length > 0;
+  const hasVisibleToasts = useMemo(() => hasVisibleToastsAt(toasts, nowMs), [toasts, nowMs]);
 
   useEffect(() => {
+    if (!hasVisibleToasts) return;
+
     const interval = setInterval(() => {
-      if (isShown && !anyToastToShow(toasts)) {
-        setIsShown(false);
-      }
+      setNowMs(Date.now());
     }, 500);
     return () => clearInterval(interval);
-  }, [isShown]);
+  }, [hasVisibleToasts]);
 
   return (
     (isShown && (
-      <div className={"dark fixed w-96 mx-auto left-[1%] bottom-[1%] z-[100]"}>
-        {unexpiredToasts(toasts).map((toast, index) => (
+      <div className={"dark fixed left-3 bottom-3 z-[180] w-[min(24rem,calc(100vw-1.5rem))]"}>
+        {visibleToasts.map((toast, index) => (
           <Toast key={getToastKey(toast, index)}>
             <div
               className={
@@ -101,7 +96,7 @@ export const Toasts = memo(() => {
                   ? localized[message.substring(4)]
                   : message;
                 return (
-                  <p className="break-all" key={i}>
+                  <p className="break-all" key={`${getToastKey(toast, index)}:${i}`}>
                     {localizedMessage}
                   </p>
                 );
