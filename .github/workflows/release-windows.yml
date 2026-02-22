@@ -129,17 +129,39 @@ jobs:
           Write-Host "Resolved zip asset: $($zip.Name)"
 
       - name: Ensure NSIS is available
+        id: nsis
         shell: pwsh
         run: |
-          if (-not (Get-Command makensis -ErrorAction SilentlyContinue)) {
-            choco install nsis -y --no-progress
-            "C:\Program Files (x86)\NSIS" | Out-File -FilePath $env:GITHUB_PATH -Append -Encoding utf8
+          $resolveNsisExe = {
+            $candidateRoots = @(
+              [Environment]::GetFolderPath("ProgramFilesX86"),
+              [Environment]::GetFolderPath("ProgramFiles"),
+              "C:\Program Files (x86)",
+              "C:\Program Files"
+            ) | Where-Object { $_ -and (Test-Path $_) }
+
+            $candidateExes = $candidateRoots | ForEach-Object { Join-Path $_ "NSIS\makensis.exe" }
+            return $candidateExes | Where-Object { Test-Path $_ } | Select-Object -First 1
           }
-          makensis /VERSION
+
+          $nsisExe = & $resolveNsisExe
+          if (-not $nsisExe) {
+            choco install nsis -y --no-progress
+            $nsisExe = & $resolveNsisExe
+          }
+
+          if (-not $nsisExe) {
+            throw "NSIS was installed but makensis.exe was not found."
+          }
+
+          "nsis_exe=$nsisExe" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+          Write-Host "Using NSIS executable: $nsisExe"
+          & $nsisExe /VERSION
 
       - name: Build Windows bootstrap installer
         shell: pwsh
         env:
+          NSIS_EXE: ${{ steps.nsis.outputs.nsis_exe }}
           RELEASE_TAG: ${{ steps.meta.outputs.tag }}
           RELEASE_REPOSITORY: ${{ github.repository }}
           RELEASE_ZIP_ASSET: ${{ steps.zipmeta.outputs.zip_name }}
@@ -147,7 +169,7 @@ jobs:
           $version = $env:RELEASE_TAG.TrimStart("v")
           New-Item -ItemType Directory -Path "out/installer" -Force | Out-Null
 
-          makensis `
+          & $env:NSIS_EXE `
             "/DAPP_VERSION=$version" `
             "/DRELEASE_TAG=$env:RELEASE_TAG" `
             "/DRELEASE_REPOSITORY=$env:RELEASE_REPOSITORY" `
