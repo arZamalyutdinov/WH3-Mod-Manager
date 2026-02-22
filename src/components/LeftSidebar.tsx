@@ -59,38 +59,38 @@ const LeftSidebar = memo(() => {
     <>
       <Tabs
         id="left-sidebar"
-        className="fixed top-10 z-[260] left-2 outline-transparent parent-unhide-child select-none"
+        className="left-sidebar-shell sticky top-3 z-30 w-full outline-transparent select-none"
         onSelect={(index) => onTabSelected(index)}
         selectedIndex={selectedIndex >= 0 ? selectedIndex : 0}
       >
         <TabList>
           <Tab>
-            <div className="flex items-center h-full relative">
+            <div className="flex items-center h-full gap-2">
               <IoIosList size="1.5rem" />
-              <span className="ml-2 mr-2 hidden-child">{localized.allMods}</span>
-              <span className="text-xs absolute hidden-child -right-0 -bottom-2 opacity-60">Ctrl+1</span>
+              <span className="mr-2">{localized.allMods}</span>
+              <span className="ml-auto text-xs opacity-60">Ctrl+1</span>
             </div>
           </Tab>
           <Tab>
-            <div className="flex items-center h-full parent-unhide-child relative">
+            <div className="flex items-center h-full gap-2">
               <IoMdCheckboxOutline size="1.5rem" />
-              <span className="ml-2 mr-2 hidden-child">{localized.enabledModsCapitalized}</span>
-              <span className="text-xs absolute hidden-child -right-0 -bottom-2 opacity-60">Ctrl+2</span>
+              <span className="mr-2">{localized.enabledModsCapitalized}</span>
+              <span className="ml-auto text-xs opacity-60">Ctrl+2</span>
             </div>
           </Tab>
           <Tab>
-            <div className="flex items-center h-full parent-unhide-child relative">
+            <div className="flex items-center h-full gap-2">
               <MdCategory size="1.5rem" />
-              <span className="ml-2 mr-2 hidden-child">{localized.categories}</span>
-              <span className="text-xs absolute hidden-child -right-0 -bottom-2 opacity-60">Ctrl+3</span>
+              <span className="mr-2">{localized.categories}</span>
+              <span className="ml-auto text-xs opacity-60">Ctrl+3</span>
             </div>
           </Tab>
           {isFeaturesForModdersEnabled && (
             <Tab>
-              <div className="flex items-center h-full parent-unhide-child relative">
+              <div className="flex items-center h-full gap-2">
                 <FaProjectDiagram size="1.5rem" />
-                <span className="ml-2 mr-2 hidden-child">Node Editor</span>
-                <span className="text-xs absolute hidden-child -right-0 -bottom-2 opacity-60">Ctrl+4</span>
+                <span className="mr-2">Node Editor</span>
+                <span className="ml-auto text-xs opacity-60">Ctrl+4</span>
               </div>
             </Tab>
           )}

@@ -387,8 +387,12 @@ body:not(.disable-row-hover) .row-hover-highlight:hover > div:not(.drop-ghost) {
   position: sticky;
   top: 0.75rem;
   z-index: 40;
-  max-height: calc(100vh - 3rem);
+  height: calc(100vh - 3.75rem);
+  max-height: calc(100vh - 3.75rem);
   overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  scrollbar-gutter: stable;
   padding: 0.875rem;
   border-radius: 14px;
   border: 1px solid rgba(100, 116, 139, 0.45);
@@ -410,6 +414,7 @@ body:not(.disable-row-hover) .row-hover-highlight:hover > div:not(.drop-ghost) {
   .sidebar-shell {
     position: relative;
     top: 0;
+    height: auto;
     max-height: none;
   }
 }

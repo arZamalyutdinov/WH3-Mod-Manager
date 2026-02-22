@@ -60,6 +60,8 @@ console.log("IN RENDERER");
 let isSubscribedToStoreChanges = false;
 let previousConfigSaveSignature: string | undefined;
 let previousReadModsSignature: string | undefined;
+let queuedPackCollisionProgress: PackCollisionsCheckProgressData | undefined;
+let hasScheduledPackCollisionProgressDispatch = false;
 
 interface WindowWithApi extends Window {
   api: api;
@@ -394,8 +396,17 @@ window.api?.setPackCollisions((event, packCollisions: PackCollisions) => {
 });
 
 window.api?.setPackCollisionsCheckProgress((event, progressData: PackCollisionsCheckProgressData) => {
-  // console.log("INVOKED: setPackCollisionsCheckProgress");
-  store.dispatch(setPackCollisionsCheckProgress(progressData));
+  queuedPackCollisionProgress = progressData;
+  if (hasScheduledPackCollisionProgressDispatch) return;
+
+  hasScheduledPackCollisionProgressDispatch = true;
+  window.requestAnimationFrame(() => {
+    if (queuedPackCollisionProgress) {
+      store.dispatch(setPackCollisionsCheckProgress(queuedPackCollisionProgress));
+    }
+    queuedPackCollisionProgress = undefined;
+    hasScheduledPackCollisionProgressDispatch = false;
+  });
 });
 
 window.api?.setPackSearchResults((event, packNames) => {
