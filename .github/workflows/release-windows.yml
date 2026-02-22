@@ -167,15 +167,22 @@ jobs:
           RELEASE_ZIP_ASSET: ${{ steps.zipmeta.outputs.zip_name }}
         run: |
           $version = $env:RELEASE_TAG.TrimStart("v")
-          New-Item -ItemType Directory -Path "out/installer" -Force | Out-Null
+          $repoRoot = if ($env:GITHUB_WORKSPACE) { $env:GITHUB_WORKSPACE } else { (Get-Location).Path }
+          $installerOutDir = Join-Path $repoRoot "out\installer"
+          $installerOutFile = Join-Path $installerOutDir "WH3MM-Installer-$env:RELEASE_TAG.exe"
+          $nsisScript = Join-Path $repoRoot "installer\windows\wh3mm-bootstrapper.nsi"
+
+          New-Item -ItemType Directory -Path $installerOutDir -Force | Out-Null
+          Write-Host "NSIS script: $nsisScript"
+          Write-Host "Installer output: $installerOutFile"
 
           & $env:NSIS_EXE `
             "/DAPP_VERSION=$version" `
             "/DRELEASE_TAG=$env:RELEASE_TAG" `
             "/DRELEASE_REPOSITORY=$env:RELEASE_REPOSITORY" `
             "/DRELEASE_ZIP_ASSET=$env:RELEASE_ZIP_ASSET" `
-            "/DOUT_FILE=out/installer/WH3MM-Installer-$env:RELEASE_TAG.exe" `
-            "installer/windows/wh3mm-bootstrapper.nsi"
+            "/DOUT_FILE=$installerOutFile" `
+            $nsisScript
 
       - name: List installer outputs
         shell: pwsh
