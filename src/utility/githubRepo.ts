@@ -19,3 +19,20 @@ export const getGithubRepositoryUrl = (repository = getReleaseRepository()) => {
 export const getLatestReleaseApiUrl = (repository = getReleaseRepository()) => {
   return `https://api.github.com/repos/${repository}/releases/latest`;
 };
+
+export const isZipReleaseAsset = (asset: {
+  content_type?: string;
+  browser_download_url?: string;
+  name?: string;
+}) => {
+  const contentType = asset.content_type?.toLowerCase() ?? "";
+  if (contentType === "application/zip" || contentType === "application/x-zip-compressed") {
+    return true;
+  }
+
+  const downloadUrl = asset.browser_download_url?.toLowerCase() ?? "";
+  if (downloadUrl.endsWith(".zip")) return true;
+
+  const name = asset.name?.toLowerCase() ?? "";
+  return name.endsWith(".zip");
+};

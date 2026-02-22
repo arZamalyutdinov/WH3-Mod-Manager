@@ -18,7 +18,7 @@ import { windows, registerIpcMainListeners } from "./ipcMainListeners";
 import * as https from "https";
 import { Extract } from "unzipper";
 import { isSupportedLanguage } from "./utility/sharedHelpers";
-import { getLatestReleaseApiUrl, getReleaseRepository } from "./utility/githubRepo";
+import { getLatestReleaseApiUrl, getReleaseRepository, isZipReleaseAsset } from "./utility/githubRepo";
 
 //-------------- HOT RELOAD DOESN'T RELOAD INDEX.TS
 
@@ -260,11 +260,9 @@ if (!gotTheLock) {
         .then((res) => res.json())
         .then((body) => {
           body.assets.forEach((asset: { content_type: string; browser_download_url: string }) => {
-            windows.mainWindow?.webContents.send(
-              "handleLog",
-              asset.content_type == "application/x-zip-compressed"
-            );
-            if (asset.content_type === "application/x-zip-compressed") {
+            const isZipAsset = isZipReleaseAsset(asset);
+            windows.mainWindow?.webContents.send("handleLog", isZipAsset);
+            if (isZipAsset) {
               modUpdatedExists = {
                 updateExists: true,
                 downloadURL: asset.browser_download_url,
