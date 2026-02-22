@@ -29,11 +29,11 @@ const Main = (props: MainProps) => {
         <NodeEditor currentFile={currentFlowFileSelection} currentPack={currentPack}></NodeEditor>
       )) ||
         (currentTab == "categories" && <Categories></Categories>) || (
-          <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_21rem] gap-4 text-white max-w-[110rem] mx-auto">
+          <div className="mx-auto grid max-w-[110rem] grid-cols-1 gap-4 text-white xl:grid-cols-[minmax(0,1fr)_22rem]">
             <div className="min-w-0">
               <ModRows scrollElement={props.scrollElement} />
             </div>
-            <div className="min-w-0">
+            <div className="min-w-0 xl:self-start">
               <Sidebar />
             </div>
             <ModTagPicker></ModTagPicker>

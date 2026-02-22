@@ -93,6 +93,7 @@ import { tryOpenFile } from "./utility/fileHelpers";
 import getPackTableData from "./utility/frontend/packDataHandling";
 import { collator } from "./utility/packFileSorting";
 import { buildCustomizableModsSignature } from "./utility/signatureHelpers";
+import { resolveLocalizedValue } from "./utility/localizationHelpers";
 import steamCollectionScript from "./utility/steamCollectionScript";
 import Trie from "./utility/trie";
 import { Md10K } from "react-icons/md";
@@ -108,6 +109,7 @@ let contentWatcher: chokidar.FSWatcher | undefined;
 let dataWatcher: chokidar.FSWatcher | undefined;
 let downloadsWatcher: chokidar.FSWatcher | undefined;
 let mergedWatcher: chokidar.FSWatcher | undefined;
+let isCompatDataRequestInFlight = false;
 
 export const windows = {
   mainWindow: undefined as BrowserWindow | undefined,
@@ -2648,7 +2650,7 @@ export const registerIpcMainListeners = (
         await i18n.changeLanguage(appData.currentLanguage);
       }
 
-      return i18n.t(translationId, options);
+      return resolveLocalizedValue(translationId, i18n.t(translationId, options));
     },
   );
 
@@ -2661,7 +2663,7 @@ export const registerIpcMainListeners = (
 
       const translated: Record<string, string> = {};
       for (const id of Object.keys(translationIdsWithOptions)) {
-        translated[id] = i18n.t(id, translationIdsWithOptions[id]);
+        translated[id] = resolveLocalizedValue(id, i18n.t(id, translationIdsWithOptions[id]));
       }
       return translated;
     },
@@ -2676,42 +2678,89 @@ export const registerIpcMainListeners = (
 
     const translated: Record<string, string> = {};
     for (const id of Object.keys(translationIds)) {
-      translated[id] = i18n.t(id);
+      translated[id] = resolveLocalizedValue(id, i18n.t(id), translationIds[id]);
     }
     return translated;
   });
 
   ipcMain.on("getCompatData", async (event, mods: Mod[]) => {
     console.log("SET PACK COLLISIONS");
+    if (isCompatDataRequestInFlight) {
+      console.log("Skipping getCompatData while another compatibility check is still running.");
+      return;
+    }
+
     const dataFolder = appData.gamesToGameFolderPaths[appData.currentGame].dataFolder;
     if (!dataFolder) return;
 
-    await readMods(mods, false, true, true);
-    await readModsByPath(
-      appData.allVanillaPackNames
-        .filter(
-          (packName) =>
-            packName.startsWith("local_en") ||
-            (!packName.startsWith("audio_") && !packName.startsWith("local_")),
-        )
-        .map((packName) => nodePath.join(dataFolder, packName)),
-      { readScripts: appData.isCompatCheckingVanillaPacks },
-      true,
-    );
+    isCompatDataRequestInFlight = true;
+    try {
+      await readMods(mods, false, true, true);
+      await readModsByPath(
+        appData.allVanillaPackNames
+          .filter(
+            (packName) =>
+              packName.startsWith("local_en") ||
+              (!packName.startsWith("audio_") && !packName.startsWith("local_")),
+          )
+          .map((packName) => nodePath.join(dataFolder, packName)),
+        { readScripts: appData.isCompatCheckingVanillaPacks },
+        true,
+      );
 
-    mainWindow?.webContents.send(
-      "setPackCollisions",
-      getCompatData(appData.packsData, (currentIndex, maxIndex, firstPackName, secondPackName, type) => {
-        mainWindow?.webContents.send("setPackCollisionsCheckProgress", {
-          currentIndex,
-          maxIndex,
-          firstPackName,
-          secondPackName,
-          type,
-        } as PackCollisionsCheckProgressData);
-      }),
-    );
-    emptyAllCompatDataCollections();
+      const progressThrottleMs = 75;
+      const progressThrottleStep = 25;
+      let lastProgressSentAt = 0;
+      let lastProgressSentIndex = -1;
+      let latestProgressData: PackCollisionsCheckProgressData | undefined;
+      const sendProgress = (progressData: PackCollisionsCheckProgressData) => {
+        mainWindow?.webContents.send("setPackCollisionsCheckProgress", progressData);
+        lastProgressSentAt = Date.now();
+        lastProgressSentIndex = progressData.currentIndex;
+      };
+
+      const packCollisions = getCompatData(
+        appData.packsData,
+        (currentIndex, maxIndex, firstPackName, secondPackName, type) => {
+          const progressData = {
+            currentIndex,
+            maxIndex,
+            firstPackName,
+            secondPackName,
+            type,
+          } as PackCollisionsCheckProgressData;
+          latestProgressData = progressData;
+
+          const now = Date.now();
+          const isFinalProgress = maxIndex > 0 && currentIndex >= maxIndex;
+          const isStartProgress = currentIndex <= 1;
+          const isTimeWindowElapsed = now - lastProgressSentAt >= progressThrottleMs;
+          const isStepWindowElapsed = currentIndex - lastProgressSentIndex >= progressThrottleStep;
+
+          if (isStartProgress || isFinalProgress || isTimeWindowElapsed || isStepWindowElapsed) {
+            sendProgress(progressData);
+          }
+        },
+      );
+
+      if (latestProgressData && latestProgressData.currentIndex != lastProgressSentIndex) {
+        sendProgress(latestProgressData);
+      }
+
+      mainWindow?.webContents.send("setPackCollisions", packCollisions);
+    } catch (error) {
+      console.error("getCompatData failed:", error);
+      mainWindow?.webContents.send("setPackCollisionsCheckProgress", {
+        currentIndex: 0,
+        maxIndex: 0,
+        firstPackName: "",
+        secondPackName: "",
+        type: "Files",
+      } as PackCollisionsCheckProgressData);
+    } finally {
+      emptyAllCompatDataCollections();
+      isCompatDataRequestInFlight = false;
+    }
   });
 
   ipcMain.on("copyToData", async (event, modPathsToCopy?: string[]) => {

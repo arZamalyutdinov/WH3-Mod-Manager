@@ -24,12 +24,18 @@ const TopBar = memo(() => {
     enabledMods.find((mod) => mod.name === iterMod.name)
   );
   const managerNameAndVersion = `WH3 Mod Manager v${appPackage.version}`;
+  const numModsEnabledText =
+    translated["numModsEnabled"] ??
+    `${enabledMods.length} mod${enabledMods.length === 1 ? "" : "s"} enabled`;
+  const numModsHiddenText =
+    translated["numModsHidden"] ??
+    `${hiddenAndEnabledMods.length} of those hidden`;
   const title = match(window.location.pathname)
     .with(
       P.string.includes("/main_window"),
       () =>
-        `${managerNameAndVersion}: ${translated["numModsEnabled"]}` +
-        (hiddenAndEnabledMods.length > 0 ? ` (${translated["numModsHidden"]})` : "") +
+        `${managerNameAndVersion}: ${numModsEnabledText}` +
+        (hiddenAndEnabledMods.length > 0 ? ` (${numModsHiddenText})` : "") +
         ` for ${gameToGameName[currentGame]}` +
         ((isHardwareAccelerationDisabled && " nogpu") || "") +
         ((isAdmin && " admin") || "")

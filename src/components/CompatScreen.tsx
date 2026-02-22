@@ -1,4 +1,4 @@
-import React, { memo, useCallback, useEffect } from "react";
+import React, { memo, useCallback, useEffect, useMemo, useRef } from "react";
 import { useAppDispatch, useAppSelector } from "../hooks";
 import { Modal } from "../flowbite/components/Modal/index";
 import { Spinner, Tabs } from "../flowbite";
@@ -12,6 +12,7 @@ import {
   DBRefOrigin,
   FileAnalysisError,
   FileToFileReference,
+  PackCollisions,
   PackFileCollision,
   PackName,
   PackTableCollision,
@@ -26,8 +27,6 @@ import { IoPeople } from "react-icons/io5";
 import { BsPersonVcard } from "react-icons/bs";
 import { LuPaintbrush2 } from "react-icons/lu";
 
-let cachedIsCompatOpen = false;
-
 const baseNameOfFile = /.*\\/;
 const matchTablePartOfFileName = /.*?\\(.*?)\\.*?/;
 
@@ -36,6 +35,16 @@ const fileNameToIcon = (packFileName: string) => {
   if (packFileName.endsWith(".xml.material")) return <LuPaintbrush2 className="h-5 w-5 self-center ml-2" />;
   if (packFileName.endsWith(".variantmeshdefinition"))
     return <BsPersonVcard className="h-5 w-5 self-center ml-2" />;
+};
+
+const EMPTY_PACK_COLLISIONS: PackCollisions = {
+  packFileCollisions: [],
+  packTableCollisions: [],
+  missingTableReferences: {},
+  uniqueIdsCollisions: {},
+  scriptListenerCollisions: {},
+  packFileAnalysisErrors: {},
+  missingFileRefs: {},
 };
 
 const CompatScreen = memo(() => {
@@ -52,62 +61,94 @@ const CompatScreen = memo(() => {
   const [useEnabledModsOnly, setUseEnabledModsOnly] = React.useState(true);
   const [selectedModFilter, setSelectedModFilter] = React.useState("");
 
+  const wasCompatOpen = useRef(false);
+  const enabledModNames = useMemo(
+    () => new Set(enabledMods.map((enabledMod) => enabledMod.name)),
+    [enabledMods]
+  );
+  const modNameToOrder = useMemo(() => {
+    const modOrder = new Map<string, number>();
+    sortedMods.forEach((mod, index) => modOrder.set(mod.name, index));
+    return modOrder;
+  }, [sortedMods]);
+  const getModOrder = useCallback(
+    (modName: string) => modNameToOrder.get(modName) ?? Number.MAX_SAFE_INTEGER,
+    [modNameToOrder]
+  );
+  const sortByModOrder = useCallback(
+    (firstPackName: string, secondPackName: string) => {
+      const orderDelta = getModOrder(firstPackName) - getModOrder(secondPackName);
+      if (orderDelta != 0) return orderDelta;
+      return firstPackName.localeCompare(secondPackName);
+    },
+    [getModOrder]
+  );
+
+  const clearCompatData = useCallback(() => {
+    dispatch(setPackCollisions(EMPTY_PACK_COLLISIONS));
+  }, [dispatch]);
+
   useEffect(() => {
-    if (!cachedIsCompatOpen && isCompatOpen) {
+    if (!wasCompatOpen.current && isCompatOpen) {
       console.log(
         "Compat Panel is opened, getCompatData called with useEnabledModsOnly:",
         useEnabledModsOnly
       );
+      clearCompatData();
+      setSelectedModFilter("");
       if (useEnabledModsOnly) {
         window.api?.getCompatData(enabledMods);
       } else {
         window.api?.getCompatData(mods);
       }
     }
-    if (cachedIsCompatOpen && !isCompatOpen) {
+    if (wasCompatOpen.current && !isCompatOpen) {
       console.log("Compat Panel is closed, getting rid of compat data");
-      dispatch(
-        setPackCollisions({
-          packFileCollisions: [],
-          packTableCollisions: [],
-          missingTableReferences: {},
-          uniqueIdsCollisions: {},
-          scriptListenerCollisions: {},
-          packFileAnalysisErrors: {},
-          missingFileRefs: {},
-        })
-      );
+      clearCompatData();
+      setSelectedModFilter("");
     }
-    cachedIsCompatOpen = isCompatOpen;
-  });
+    wasCompatOpen.current = isCompatOpen;
+  }, [clearCompatData, enabledMods, isCompatOpen, mods, useEnabledModsOnly]);
 
-  if (
-    lastPackCollisionCheckProgressIndex == -1 &&
-    lastPackCollisionCheckProgressIndex != packCollisionsCheckProgress.currentIndex &&
-    packCollisionsCheckProgress.currentIndex != packCollisionsCheckProgress.maxIndex
-  ) {
-    console.log(
-      "in CompatScreen, first if",
-      lastPackCollisionCheckProgressIndex,
-      packCollisionsCheckProgress.currentIndex,
-      packCollisionsCheckProgress.maxIndex
+  const isCompatCheckInProgress = useMemo(
+    () =>
+      packCollisionsCheckProgress.currentIndex >= 0 &&
+      packCollisionsCheckProgress.maxIndex > 0 &&
+      packCollisionsCheckProgress.currentIndex < packCollisionsCheckProgress.maxIndex,
+    [packCollisionsCheckProgress.currentIndex, packCollisionsCheckProgress.maxIndex]
+  );
+
+  useEffect(() => {
+    if (!isCompatOpen) {
+      setIsSpinnerClosed(true);
+      setLastPackCollisionCheckProgressIndex(-1);
+      return;
+    }
+
+    if (isCompatCheckInProgress) {
+      setLastPackCollisionCheckProgressIndex(packCollisionsCheckProgress.currentIndex);
+      setIsSpinnerClosed(false);
+      return;
+    }
+
+    if (lastPackCollisionCheckProgressIndex != -1) {
+      setIsSpinnerClosed(true);
+      setLastPackCollisionCheckProgressIndex(-1);
+    }
+  }, [
+    isCompatCheckInProgress,
+    isCompatOpen,
+    lastPackCollisionCheckProgressIndex,
+    packCollisionsCheckProgress.currentIndex,
+  ]);
+
+  const progressPercent = useMemo(() => {
+    if (packCollisionsCheckProgress.maxIndex <= 0) return 0;
+    return Math.min(
+      100,
+      Math.max(0, (packCollisionsCheckProgress.currentIndex / packCollisionsCheckProgress.maxIndex) * 100)
     );
-    setLastPackCollisionCheckProgressIndex(packCollisionsCheckProgress.currentIndex);
-    setIsSpinnerClosed(false);
-  }
-  if (
-    lastPackCollisionCheckProgressIndex != -1 &&
-    packCollisionsCheckProgress.currentIndex == packCollisionsCheckProgress.maxIndex
-  ) {
-    console.log(
-      "in CompatScreen, second if",
-      lastPackCollisionCheckProgressIndex,
-      packCollisionsCheckProgress.currentIndex,
-      packCollisionsCheckProgress.maxIndex
-    );
-    setIsSpinnerClosed(true);
-    setLastPackCollisionCheckProgressIndex(-1);
-  }
+  }, [packCollisionsCheckProgress.currentIndex, packCollisionsCheckProgress.maxIndex]);
 
   const localized = useLocalizations();
   const compatHelpTwo = ((localized.compatHelpTwo ?? "").includes("STAR_ICON") &&
@@ -151,28 +192,24 @@ const CompatScreen = memo(() => {
 
   if (useEnabledModsOnly) {
     Object.keys(groupedPackFileCollisions).forEach((packName) => {
-      const mod = enabledMods.find((iterMod) => iterMod.name == packName);
-      if (!mod) delete groupedPackFileCollisions[packName];
+      if (!enabledModNames.has(packName)) delete groupedPackFileCollisions[packName];
     });
 
     Object.keys(groupedPackFileCollisions).forEach((packName) => {
       const secondPackNames = Object.keys(groupedPackFileCollisions[packName]);
       secondPackNames.forEach((secondPackName) => {
-        const mod = enabledMods.find((iterMod) => iterMod.name == secondPackName);
-        if (!mod) delete groupedPackFileCollisions[packName][secondPackName];
+        if (!enabledModNames.has(secondPackName)) delete groupedPackFileCollisions[packName][secondPackName];
       });
     });
 
     Object.keys(groupedPackTableCollisions).forEach((packName) => {
-      const mod = enabledMods.find((iterMod) => iterMod.name == packName);
-      if (!mod) delete groupedPackTableCollisions[packName];
+      if (!enabledModNames.has(packName)) delete groupedPackTableCollisions[packName];
     });
 
     Object.keys(groupedPackTableCollisions).forEach((packName) => {
       const secondPackNames = Object.keys(groupedPackTableCollisions[packName]);
       secondPackNames.forEach((secondPackName) => {
-        const mod = enabledMods.find((iterMod) => iterMod.name == secondPackName);
-        if (!mod) delete groupedPackTableCollisions[packName][secondPackName];
+        if (!enabledModNames.has(secondPackName)) delete groupedPackTableCollisions[packName][secondPackName];
       });
     });
   }
@@ -201,8 +238,7 @@ const CompatScreen = memo(() => {
   const groupedMissingTableReferences: Record<string, Record<string, DBRefOrigin[]>> = {};
   for (const [packName, refs] of Object.entries(packCollisions.missingTableReferences)) {
     if (useEnabledModsOnly) {
-      const mod = enabledMods.find((iterMod) => iterMod.name == packName);
-      if (!mod) continue;
+      if (!enabledModNames.has(packName)) continue;
     }
 
     groupedMissingTableReferences[packName] = groupBy(refs, (ref) => {
@@ -221,9 +257,8 @@ const CompatScreen = memo(() => {
   > = {};
   for (const [packName, uniqueIdsCollisions] of Object.entries(packCollisions.uniqueIdsCollisions)) {
     if (useEnabledModsOnly) {
-      const mod =
-        enabledMods.find((iterMod) => iterMod.name == packName) || vanillaPackNames.includes(packName);
-      if (!mod) continue;
+      const isEnabledOrVanilla = enabledModNames.has(packName) || vanillaPackNames.includes(packName);
+      if (!isEnabledOrVanilla) continue;
     }
 
     const groupedByTableName = groupBy(uniqueIdsCollisions, (uniqueIdsCollision) => {
@@ -243,10 +278,9 @@ const CompatScreen = memo(() => {
 
       if (useEnabledModsOnly) {
         for (const secondPackName of Object.keys(subGroupedBySecondPackName)) {
-          const mod =
-            enabledMods.find((iterMod) => iterMod.name == secondPackName) ||
-            vanillaPackNames.includes(secondPackName);
-          if (!mod) {
+          const isEnabledOrVanilla =
+            enabledModNames.has(secondPackName) || vanillaPackNames.includes(secondPackName);
+          if (!isEnabledOrVanilla) {
             delete groupedUniqueIdsCollisions[packName][tableName][secondPackName];
           }
         }
@@ -270,9 +304,8 @@ const CompatScreen = memo(() => {
     packCollisions.scriptListenerCollisions
   )) {
     if (useEnabledModsOnly) {
-      const mod =
-        enabledMods.find((iterMod) => iterMod.name == packName) || vanillaPackNames.includes(packName);
-      if (!mod) continue;
+      const isEnabledOrVanilla = enabledModNames.has(packName) || vanillaPackNames.includes(packName);
+      if (!isEnabledOrVanilla) continue;
     }
 
     groupedScriptListenerCollisions[packName] = groupedScriptListenerCollisions[packName] || {};
@@ -281,11 +314,11 @@ const CompatScreen = memo(() => {
     if (useEnabledModsOnly) {
       for (const scriptListenerCollision of groupedScriptListenerCollisions[packName]) {
         if (scriptListenerCollision.secondPackName) {
-          const mod =
-            enabledMods.find((iterMod) => iterMod.name == scriptListenerCollision.secondPackName) ||
+          const isEnabledOrVanilla =
+            enabledModNames.has(scriptListenerCollision.secondPackName) ||
             vanillaPackNames.includes(scriptListenerCollision.secondPackName);
-          if (!mod) {
-            groupedScriptListenerCollisions[packName].filter(
+          if (!isEnabledOrVanilla) {
+            groupedScriptListenerCollisions[packName] = groupedScriptListenerCollisions[packName].filter(
               (collision) => collision != scriptListenerCollision
             );
           }
@@ -302,9 +335,8 @@ const CompatScreen = memo(() => {
   const groupedPackFileAnalysisErrors: Record<PackName, Record<string, FileAnalysisError[]>> = {};
   for (const [packName, packFileAnalysisErrors] of Object.entries(packCollisions.packFileAnalysisErrors)) {
     if (useEnabledModsOnly) {
-      const mod =
-        enabledMods.find((iterMod) => iterMod.name == packName) || vanillaPackNames.includes(packName);
-      if (!mod) continue;
+      const isEnabledOrVanilla = enabledModNames.has(packName) || vanillaPackNames.includes(packName);
+      if (!isEnabledOrVanilla) continue;
     }
 
     groupedPackFileAnalysisErrors[packName] = groupedPackFileAnalysisErrors[packName] || {};
@@ -319,9 +351,8 @@ const CompatScreen = memo(() => {
   const groupedMissingFileRefs: Record<PackName, Record<DBFileName, FileToFileReference[]>> = {};
   for (const [packName, missingFileRefs] of Object.entries(packCollisions.missingFileRefs)) {
     if (useEnabledModsOnly) {
-      const mod =
-        enabledMods.find((iterMod) => iterMod.name == packName) || vanillaPackNames.includes(packName);
-      if (!mod) continue;
+      const isEnabledOrVanilla = enabledModNames.has(packName) || vanillaPackNames.includes(packName);
+      if (!isEnabledOrVanilla) continue;
     }
 
     groupedMissingFileRefs[packName] = groupedMissingFileRefs[packName] || {};
@@ -340,18 +371,14 @@ const CompatScreen = memo(() => {
       console.log("READ ALL MODS");
       window.api?.readMods(mods, false);
     }
-    setUseEnabledModsOnly(!useEnabledModsOnly);
+    setUseEnabledModsOnly((enabledOnly) => !enabledOnly);
   }, [useEnabledModsOnly, mods]);
 
   return (
     <div>
       <div className="text-center mt-4">
         <button
-          onClick={() =>
-            setIsCompatOpen(() => {
-              return !isCompatOpen;
-            })
-          }
+          onClick={() => setIsCompatOpen((wasOpen) => !wasOpen)}
           className="w-36 text-white bg-blue-700 hover:bg-blue-800 focus:ring-4 focus:ring-blue-300 font-medium rounded-lg text-sm px-5 py-2.5 mx-2 mb-2 m-auto dark:bg-transparent dark:hover:bg-gray-700 dark:border-gray-600 dark:border-2 focus:outline-none dark:focus:ring-gray-800"
           type="button"
         >
@@ -365,17 +392,7 @@ const CompatScreen = memo(() => {
           // show={true}
           onClose={() => {
             setIsCompatOpen(false);
-            dispatch(
-              setPackCollisions({
-                packFileCollisions: [],
-                packTableCollisions: [],
-                missingTableReferences: {},
-                uniqueIdsCollisions: {},
-                scriptListenerCollisions: {},
-                packFileAnalysisErrors: {},
-                missingFileRefs: {},
-              })
-            );
+            clearCompatData();
           }}
           size="2xl"
           position="top-center"
@@ -418,15 +435,7 @@ const CompatScreen = memo(() => {
                               ? [...availableMods, selectedModFilter]
                               : availableMods;
                           return modsToShow
-                            .sort((firstPackName, secondPackName) => {
-                              const firstPackIndex = sortedMods.indexOf(
-                                sortedMods.find((iterMod) => iterMod.name == firstPackName) as Mod
-                              );
-                              const secondPackIndex = sortedMods.indexOf(
-                                sortedMods.find((iterMod) => iterMod.name == secondPackName) as Mod
-                              );
-                              return firstPackIndex - secondPackIndex;
-                            })
+                            .sort(sortByModOrder)
                             .map((modName) => (
                               <option key={modName} value={modName}>
                                 {modName}
@@ -447,37 +456,15 @@ const CompatScreen = memo(() => {
                       .filter(
                         (firstPackName) => selectedModFilter === "" || firstPackName === selectedModFilter
                       )
-                      .sort((firstPackName, secondPackName) => {
-                        const firstPackIndex = sortedMods.indexOf(
-                          sortedMods.find((iterMod) => iterMod.name == firstPackName) as Mod
-                        );
-                        const secondPackIndex = sortedMods.indexOf(
-                          sortedMods.find((iterMod) => iterMod.name == secondPackName) as Mod
-                        );
-
-                        return firstPackIndex - secondPackIndex;
-                      })
+                      .sort(sortByModOrder)
                       .map((firstPackName) => {
-                        const firstPackIndex = sortedMods.indexOf(
-                          sortedMods.find((iterMod) => iterMod.name == firstPackName) as Mod
-                        );
+                        const firstPackIndex = getModOrder(firstPackName);
                         const secondPacks = groupedPackFileCollisions[firstPackName];
                         let donePackName = false;
                         return Object.keys(secondPacks)
-                          .sort((firstPackName, secondPackName) => {
-                            const firstPackIndex = sortedMods.indexOf(
-                              sortedMods.find((iterMod) => iterMod.name == firstPackName) as Mod
-                            );
-                            const secondPackIndex = sortedMods.indexOf(
-                              sortedMods.find((iterMod) => iterMod.name == secondPackName) as Mod
-                            );
-
-                            return firstPackIndex - secondPackIndex;
-                          })
+                          .sort(sortByModOrder)
                           .map((secondPackName) => {
-                            const secondPackIndex = sortedMods.indexOf(
-                              sortedMods.find((iterMod) => iterMod.name == secondPackName) as Mod
-                            );
+                            const secondPackIndex = getModOrder(secondPackName);
                             let doneSecondPackName = false;
                             return secondPacks[secondPackName].map((secondPack) => {
                               const fragment = (
@@ -546,15 +533,7 @@ const CompatScreen = memo(() => {
                               ? [...availableMods, selectedModFilter]
                               : availableMods;
                           return modsToShow
-                            .sort((firstPackName, secondPackName) => {
-                              const firstPackIndex = sortedMods.indexOf(
-                                sortedMods.find((iterMod) => iterMod.name == firstPackName) as Mod
-                              );
-                              const secondPackIndex = sortedMods.indexOf(
-                                sortedMods.find((iterMod) => iterMod.name == secondPackName) as Mod
-                              );
-                              return firstPackIndex - secondPackIndex;
-                            })
+                            .sort(sortByModOrder)
                             .map((modName) => (
                               <option key={modName} value={modName}>
                                 {modName}
@@ -575,30 +554,12 @@ const CompatScreen = memo(() => {
                       .filter(
                         (firstPackName) => selectedModFilter === "" || firstPackName === selectedModFilter
                       )
-                      .sort((firstPackName, secondPackName) => {
-                        const firstPackIndex = sortedMods.indexOf(
-                          sortedMods.find((iterMod) => iterMod.name == firstPackName) as Mod
-                        );
-                        const secondPackIndex = sortedMods.indexOf(
-                          sortedMods.find((iterMod) => iterMod.name == secondPackName) as Mod
-                        );
-
-                        return firstPackIndex - secondPackIndex;
-                      })
+                      .sort(sortByModOrder)
                       .map((firstPackName) => {
                         const secondPacks = groupedPackTableCollisions[firstPackName];
                         let donePackName = false;
                         return Object.keys(secondPacks)
-                          .sort((firstPackName, secondPackName) => {
-                            const firstPackIndex = sortedMods.indexOf(
-                              sortedMods.find((iterMod) => iterMod.name == firstPackName) as Mod
-                            );
-                            const secondPackIndex = sortedMods.indexOf(
-                              sortedMods.find((iterMod) => iterMod.name == secondPackName) as Mod
-                            );
-
-                            return firstPackIndex - secondPackIndex;
-                          })
+                          .sort(sortByModOrder)
                           .map((secondPackName) => {
                             let doneSecondPackName = false;
                             return Object.keys(secondPacks[secondPackName]).map((secondFileName) => {
@@ -705,15 +666,7 @@ const CompatScreen = memo(() => {
                               ? [...availableMods, selectedModFilter]
                               : availableMods;
                           return modsToShow
-                            .sort((firstPackName, secondPackName) => {
-                              const firstPackIndex = sortedMods.indexOf(
-                                sortedMods.find((iterMod) => iterMod.name == firstPackName) as Mod
-                              );
-                              const secondPackIndex = sortedMods.indexOf(
-                                sortedMods.find((iterMod) => iterMod.name == secondPackName) as Mod
-                              );
-                              return firstPackIndex - secondPackIndex;
-                            })
+                            .sort(sortByModOrder)
                             .map((modName) => (
                               <option key={modName} value={modName}>
                                 {modName}
@@ -733,16 +686,7 @@ const CompatScreen = memo(() => {
                       .filter(
                         (firstPackName) => selectedModFilter === "" || firstPackName === selectedModFilter
                       )
-                      .sort((firstPackName, secondPackName) => {
-                        const firstPackIndex = sortedMods.indexOf(
-                          sortedMods.find((iterMod) => iterMod.name == firstPackName) as Mod
-                        );
-                        const secondPackIndex = sortedMods.indexOf(
-                          sortedMods.find((iterMod) => iterMod.name == secondPackName) as Mod
-                        );
-
-                        return firstPackIndex - secondPackIndex;
-                      })
+                      .sort(sortByModOrder)
                       .map((firstPackName) => {
                         const tableKeyGroupToRefs = groupedMissingTableReferences[firstPackName];
                         let donePackName = false;
@@ -854,15 +798,7 @@ const CompatScreen = memo(() => {
                               ? [...availableMods, selectedModFilter]
                               : availableMods;
                           return modsToShow
-                            .sort((firstPackName, secondPackName) => {
-                              const firstPackIndex = sortedMods.indexOf(
-                                sortedMods.find((iterMod) => iterMod.name == firstPackName) as Mod
-                              );
-                              const secondPackIndex = sortedMods.indexOf(
-                                sortedMods.find((iterMod) => iterMod.name == secondPackName) as Mod
-                              );
-                              return firstPackIndex - secondPackIndex;
-                            })
+                            .sort(sortByModOrder)
                             .map((modName) => (
                               <option key={modName} value={modName}>
                                 {modName}
@@ -882,16 +818,7 @@ const CompatScreen = memo(() => {
                       .filter(
                         (firstPackName) => selectedModFilter === "" || firstPackName === selectedModFilter
                       )
-                      .sort((firstPackName, secondPackName) => {
-                        const firstPackIndex = sortedMods.indexOf(
-                          sortedMods.find((iterMod) => iterMod.name == firstPackName) as Mod
-                        );
-                        const secondPackIndex = sortedMods.indexOf(
-                          sortedMods.find((iterMod) => iterMod.name == secondPackName) as Mod
-                        );
-
-                        return firstPackIndex - secondPackIndex;
-                      })
+                      .sort(sortByModOrder)
                       .map((firstPackName) => {
                         const tableToUniqueIdCollisions = groupedUniqueIdsCollisions[firstPackName];
                         let donePackName = false;
@@ -900,16 +827,7 @@ const CompatScreen = memo(() => {
 
                           let doneTableName = false;
                           return Object.keys(secondPackToUniqueIdCollisions)
-                            .sort((firstPackName, secondPackName) => {
-                              const firstPackIndex = sortedMods.indexOf(
-                                sortedMods.find((iterMod) => iterMod.name == firstPackName) as Mod
-                              );
-                              const secondPackIndex = sortedMods.indexOf(
-                                sortedMods.find((iterMod) => iterMod.name == secondPackName) as Mod
-                              );
-
-                              return firstPackIndex - secondPackIndex;
-                            })
+                            .sort(sortByModOrder)
                             .map((secondPackName) => {
                               let doneSecondPackName = false;
                               const uniqueIdCollisions = secondPackToUniqueIdCollisions[secondPackName];
@@ -1109,15 +1027,7 @@ const CompatScreen = memo(() => {
                               ? [...availableMods, selectedModFilter]
                               : availableMods;
                           return modsToShow
-                            .sort((firstPackName, secondPackName) => {
-                              const firstPackIndex = sortedMods.indexOf(
-                                sortedMods.find((iterMod) => iterMod.name == firstPackName) as Mod
-                              );
-                              const secondPackIndex = sortedMods.indexOf(
-                                sortedMods.find((iterMod) => iterMod.name == secondPackName) as Mod
-                              );
-                              return firstPackIndex - secondPackIndex;
-                            })
+                            .sort(sortByModOrder)
                             .map((modName) => (
                               <option key={modName} value={modName}>
                                 {modName}
@@ -1135,16 +1045,7 @@ const CompatScreen = memo(() => {
                   <div className="text-lg">
                     {Object.keys(groupedScriptListenerCollisions)
                       .filter((packName) => selectedModFilter === "" || packName === selectedModFilter)
-                      .sort((firstPackName, secondPackName) => {
-                        const firstPackIndex = sortedMods.indexOf(
-                          sortedMods.find((iterMod) => iterMod.name == firstPackName) as Mod
-                        );
-                        const secondPackIndex = sortedMods.indexOf(
-                          sortedMods.find((iterMod) => iterMod.name == secondPackName) as Mod
-                        );
-
-                        return firstPackIndex - secondPackIndex;
-                      })
+                      .sort(sortByModOrder)
                       .map((packName) => {
                         const scriptListenerCollisions = groupedScriptListenerCollisions[packName];
                         let donePackName = false;
@@ -1254,15 +1155,7 @@ const CompatScreen = memo(() => {
                               ? [...availableMods, selectedModFilter]
                               : availableMods;
                           return modsToShow
-                            .sort((firstPackName, secondPackName) => {
-                              const firstPackIndex = sortedMods.indexOf(
-                                sortedMods.find((iterMod) => iterMod.name == firstPackName) as Mod
-                              );
-                              const secondPackIndex = sortedMods.indexOf(
-                                sortedMods.find((iterMod) => iterMod.name == secondPackName) as Mod
-                              );
-                              return firstPackIndex - secondPackIndex;
-                            })
+                            .sort(sortByModOrder)
                             .map((modName) => (
                               <option key={modName} value={modName}>
                                 {modName}
@@ -1280,16 +1173,7 @@ const CompatScreen = memo(() => {
                   <div className="text-lg">
                     {Object.keys(groupedPackFileAnalysisErrors)
                       .filter((packName) => selectedModFilter === "" || packName === selectedModFilter)
-                      .sort((firstPackName, secondPackName) => {
-                        const firstPackIndex = sortedMods.indexOf(
-                          sortedMods.find((iterMod) => iterMod.name == firstPackName) as Mod
-                        );
-                        const secondPackIndex = sortedMods.indexOf(
-                          sortedMods.find((iterMod) => iterMod.name == secondPackName) as Mod
-                        );
-
-                        return firstPackIndex - secondPackIndex;
-                      })
+                      .sort(sortByModOrder)
                       .map((packName) => {
                         const packFileToErrors = groupedPackFileAnalysisErrors[packName];
 
@@ -1370,15 +1254,7 @@ const CompatScreen = memo(() => {
                               ? [...availableMods, selectedModFilter]
                               : availableMods;
                           return modsToShow
-                            .sort((firstPackName, secondPackName) => {
-                              const firstPackIndex = sortedMods.indexOf(
-                                sortedMods.find((iterMod) => iterMod.name == firstPackName) as Mod
-                              );
-                              const secondPackIndex = sortedMods.indexOf(
-                                sortedMods.find((iterMod) => iterMod.name == secondPackName) as Mod
-                              );
-                              return firstPackIndex - secondPackIndex;
-                            })
+                            .sort(sortByModOrder)
                             .map((modName) => (
                               <option key={modName} value={modName}>
                                 {modName}
@@ -1396,16 +1272,7 @@ const CompatScreen = memo(() => {
                   <div className="text-lg">
                     {Object.keys(groupedMissingFileRefs)
                       .filter((packName) => selectedModFilter === "" || packName === selectedModFilter)
-                      .sort((firstPackName, secondPackName) => {
-                        const firstPackIndex = sortedMods.indexOf(
-                          sortedMods.find((iterMod) => iterMod.name == firstPackName) as Mod
-                        );
-                        const secondPackIndex = sortedMods.indexOf(
-                          sortedMods.find((iterMod) => iterMod.name == secondPackName) as Mod
-                        );
-
-                        return firstPackIndex - secondPackIndex;
-                      })
+                      .sort(sortByModOrder)
                       .map((packName) => {
                         const packFileToMissingRefs = groupedMissingFileRefs[packName];
                         const packFileTooltip = localized.fileInsidePack.replace("<PACKNAME>", packName);
@@ -1523,9 +1390,7 @@ const CompatScreen = memo(() => {
             <div
               className="h-5 bg-blue-600 rounded-full dark:bg-blue-500"
               style={{
-                width: `${
-                  (packCollisionsCheckProgress.currentIndex / packCollisionsCheckProgress.maxIndex) * 100
-                }%`,
+                width: `${progressPercent}%`,
               }}
             ></div>
           </div>

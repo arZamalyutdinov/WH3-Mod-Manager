@@ -1,6 +1,7 @@
 import i18next from "i18next";
 import i18nextBackend from "i18next-fs-backend";
 import isDev from "electron-is-dev";
+import { default as enTranslation } from "../../locales/en/translation.json";
 
 const i18nextOptions = {
   backend: {
@@ -15,6 +16,12 @@ const i18nextOptions = {
   interpolation: {
     escapeValue: false,
   },
+  resources: {
+    en: {
+      translation: enTranslation,
+    },
+  },
+  partialBundledLanguages: true,
   saveMissing: true,
   fallbackLng: "en",
 };

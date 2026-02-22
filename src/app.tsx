@@ -12,6 +12,7 @@ import { StrictMode, useRef, Suspense, useEffect } from "react";
 import LocalizationContext, { staticTextIds, useLocalizations } from "./localizationContext";
 import { useAppSelector } from "./hooks";
 import { perfMonitor, startTiming, endTiming } from "./utility/performanceMonitor";
+import { buildLocalizationMap } from "./utility/localizationHelpers";
 
 // Lazy load heavy components with performance tracking
 const ModsViewer = React.lazy(() => {
@@ -55,15 +56,22 @@ const App = React.memo(() => {
     };
   }, []);
 
-  const [localization, setLocalization] = React.useState<Record<string, string>>({});
+  const [localization, setLocalization] = React.useState<Record<string, string>>(() =>
+    buildLocalizationMap(undefined, staticTextIds)
+  );
   const currentLanguage = useAppSelector((state) => state.app.currentLanguage);
 
   useEffect(() => {
     if (!currentLanguage) return;
-    window.api?.translateAllStatic(staticTextIds).then((translated) => {
-      console.log("translateAllStatic", currentLanguage);
-      setLocalization(translated);
-    });
+    window.api
+      ?.translateAllStatic(staticTextIds)
+      .then((translated) => {
+        setLocalization(buildLocalizationMap(translated, staticTextIds));
+      })
+      .catch((err) => {
+        console.error("translateAllStatic failed, using fallback localization map", err);
+        setLocalization(buildLocalizationMap(undefined, staticTextIds));
+      });
   }, [currentLanguage]);
 
   const scrollElement = useRef<HTMLDivElement>(null);
@@ -81,11 +89,17 @@ const App = React.memo(() => {
           <div
             ref={scrollElement}
             id="mod-rows-scroll"
-            className="mx-auto h-[calc(100vh-28px)] overflow-y-auto pb-6 pl-[4.75rem] pr-2 pt-3 md:pr-4 scrollbar scrollbar-track-gray-700 scrollbar-thumb-blue-700"
+            className="mx-auto h-[calc(100vh-28px)] overflow-y-auto px-2 pb-6 pt-3 md:px-4 scrollbar scrollbar-track-gray-700 scrollbar-thumb-blue-700"
           >
             <Onboarding></Onboarding>
-            <LeftSidebar />
-            <Main scrollElement={scrollElement} />
+            <div className="mx-auto grid max-w-[124rem] grid-cols-1 gap-4 xl:grid-cols-[15rem_minmax(0,1fr)]">
+              <div className="min-w-0 xl:self-start">
+                <LeftSidebar />
+              </div>
+              <div className="min-w-0">
+                <Main scrollElement={scrollElement} />
+              </div>
+            </div>
           </div>
         )) ||
           (window.location.pathname.includes("/viewer") && (
