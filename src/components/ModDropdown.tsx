@@ -1,5 +1,6 @@
 import React, { memo, useEffect, useRef, useState, useLayoutEffect } from "react";
 import ModDropdownOptions from "./ModDropdownOptions";
+import { getClampedDropdownPosition } from "../utility/dropdownPosition";
 
 type ModDropdownProps = {
   isOpen: boolean;
@@ -10,8 +11,6 @@ type ModDropdownProps = {
   mods: Mod[];
   visibleMods: Mod[];
 };
-
-const VIEWPORT_PADDING = 8; // Padding from viewport edges
 
 const ModDropdown = memo((props: ModDropdownProps) => {
   const modDropdownRef = useRef<HTMLDivElement>(null);
@@ -27,29 +26,14 @@ const ModDropdown = memo((props: ModDropdownProps) => {
     const menuHeight = menuRect.height;
     const menuWidth = menuRect.width;
 
-    let newX = props.positionX;
-    let newY = props.positionY;
-
-    // Adjust Y position if menu would overflow bottom of viewport
-    if (newY + menuHeight > window.innerHeight - VIEWPORT_PADDING) {
-      // Try positioning above the click point
-      const positionAbove = props.positionY - menuHeight;
-      if (positionAbove >= VIEWPORT_PADDING) {
-        newY = positionAbove;
-      } else {
-        // If it doesn't fit above either, position at the bottom of viewport
-        newY = window.innerHeight - menuHeight - VIEWPORT_PADDING;
-      }
-    }
-
-    // Adjust X position if menu would overflow right edge of viewport
-    if (newX + menuWidth > window.innerWidth - VIEWPORT_PADDING) {
-      newX = window.innerWidth - menuWidth - VIEWPORT_PADDING;
-    }
-
-    // Ensure minimum position
-    newX = Math.max(VIEWPORT_PADDING, newX);
-    newY = Math.max(VIEWPORT_PADDING, newY);
+    const { x: newX, y: newY } = getClampedDropdownPosition({
+      clickX: props.positionX,
+      clickY: props.positionY,
+      menuWidth,
+      menuHeight,
+      viewportWidth: window.innerWidth,
+      viewportHeight: window.innerHeight,
+    });
 
     setAdjustedPosition({ x: newX, y: newY });
 
@@ -63,18 +47,38 @@ const ModDropdown = memo((props: ModDropdownProps) => {
     }
   }, [props.isOpen, props.positionX, props.positionY, props.mod, props.referenceElement]);
 
-  // Track reference element position during scroll
+  // Track reference element position during scroll/resize without a polling interval
   useEffect(() => {
     if (!props.isOpen || !props.referenceElement) return;
 
-    const interval = setInterval(() => {
+    let rafId: number | null = null;
+    const updatePosition = () => {
       if (modDropdownRef.current && props.referenceElement) {
         const refRect = props.referenceElement.getBoundingClientRect();
         modDropdownRef.current.style.top = `${refRect.top - delta.y}px`;
         modDropdownRef.current.style.left = `${refRect.left - delta.x}px`;
       }
-    }, 10);
-    return () => clearInterval(interval);
+    };
+
+    const scheduleUpdate = () => {
+      if (rafId != null) return;
+      rafId = requestAnimationFrame(() => {
+        rafId = null;
+        updatePosition();
+      });
+    };
+
+    window.addEventListener("scroll", scheduleUpdate, true);
+    window.addEventListener("resize", scheduleUpdate);
+    scheduleUpdate();
+
+    return () => {
+      if (rafId != null) {
+        cancelAnimationFrame(rafId);
+      }
+      window.removeEventListener("scroll", scheduleUpdate, true);
+      window.removeEventListener("resize", scheduleUpdate);
+    };
   }, [props.isOpen, props.referenceElement, delta]);
 
   return (
@@ -84,7 +88,7 @@ const ModDropdown = memo((props: ModDropdownProps) => {
           id="modDropdown"
           className={
             `${props.isOpen ? "" : "hidden"}` +
-            ` fixed w-52 bg-white rounded divide-y divide-gray-100 shadow dark:bg-gray-700`
+            ` fixed z-[320] w-56 overflow-hidden rounded-xl border border-gray-600/70 bg-gray-800/95 shadow-2xl backdrop-blur-sm`
           }
           style={{
             left: adjustedPosition.x,

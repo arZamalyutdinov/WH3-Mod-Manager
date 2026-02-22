@@ -123,6 +123,7 @@ const OptionsDrawer = memo(() => {
   );
 
   const [areOptionsOpen, setAreOptionsOpen] = useState(false);
+  const selectMenuPortalTarget = typeof document !== "undefined" ? document.body : null;
 
   const forceDownloadMods = useCallback((contentModsWorshopIds: string[]) => {
     window.api?.forceDownloadMods(contentModsWorshopIds);
@@ -198,7 +199,7 @@ const OptionsDrawer = memo(() => {
     [enabledMods]
   );
 
-  const SingleValue = ({ children, ...props }: SingleValueProps<OptionType, false>) => (
+  const SingleValue = ({ ...props }: SingleValueProps<OptionType, false>) => (
     <components.SingleValue {...props}>
       <img className="mt-[5px]" src={gameToImageSrc[props.data.value]} />
     </components.SingleValue>
@@ -231,7 +232,7 @@ const OptionsDrawer = memo(() => {
         <Drawer isOpen={areOptionsOpen} setIsOpen={setAreOptionsOpen}>
           <div
             id="drawer-example"
-            className="overflow-y-scroll fixed z-40 p-4 w-full h-screen bg-white dark:bg-gray-800 transition-transform left-[-16px] top-0 transform-none scrollbar scrollbar-track-gray-700 scrollbar-thumb-blue-700"
+            className="w-full px-4 pb-6 pt-2 text-slate-100 scrollbar scrollbar-track-gray-700 scrollbar-thumb-blue-700"
             tabIndex={-1}
             aria-labelledby="drawer-label"
             aria-modal="true"
@@ -255,6 +256,8 @@ const OptionsDrawer = memo(() => {
                   id="gameSelect"
                   options={availableGames}
                   styles={selectStyle}
+                  menuPortalTarget={selectMenuPortalTarget}
+                  menuPosition="fixed"
                   onChange={onGameChange}
                   isClearable={false}
                   isSearchable={false}
@@ -282,6 +285,8 @@ const OptionsDrawer = memo(() => {
                 id="languageSelect"
                 options={languageOptions}
                 styles={selectStyle}
+                menuPortalTarget={selectMenuPortalTarget}
+                menuPosition="fixed"
                 onChange={onLanguageChange}
                 isClearable={false}
                 isSearchable={false}
@@ -449,7 +454,14 @@ const OptionsDrawer = memo(() => {
             <p className="mb-3 text-sm text-gray-500 dark:text-gray-400">{localized.unhideMods}</p>
 
             <div>
-              <Select options={options} styles={selectStyle} onChange={onDeleteChange} value={null}></Select>
+              <Select
+                options={options}
+                styles={selectStyle}
+                menuPortalTarget={selectMenuPortalTarget}
+                menuPosition="fixed"
+                onChange={onDeleteChange}
+                value={null}
+              ></Select>
             </div>
 
             <h6 className="mt-10">{localized.shareMods}</h6>

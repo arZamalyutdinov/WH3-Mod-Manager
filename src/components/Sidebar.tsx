@@ -23,6 +23,7 @@ import RequiredMods from "./RequiredMods";
 import localizationContext from "../localizationContext";
 import Help from "./Help";
 import { gameToPackWithDBTablesName } from "../supportedGames";
+import { getPresetSelectOperation } from "../utility/uiStateHelpers";
 
 type OptionType = {
   value: string;
@@ -48,9 +49,9 @@ const Sidebar = memo(() => {
 
   const saves = [...useAppSelector((state) => state.app.saves)];
   saves.sort((first, second) => second.lastChanged - first.lastChanged);
+  const latestSaveName = saves[0]?.name;
 
   const [isEditPresetsPanelOpen, setIsEditPresetsPanelOpen] = useState<boolean>(false);
-  const [isUpdateCheckDone, setIsUpdateCheckDone] = useState<boolean>(false);
   const [isUpdateAvailable, setIsUpdateAvailable] = useState<boolean>(false);
   const [downloadURL, setDownloadURL] = useState<string>("");
   const [releaseNotesURL, setReleaseNotesURL] = useState<string>("");
@@ -58,7 +59,6 @@ const Sidebar = memo(() => {
   const [isShowingRequiredMods, setIsShowingRequiredMods] = useState<boolean>(false);
   const [isWaitingForRelaunch, setIsWaitingForRelaunch] = useState<boolean>(false);
   const [isWaitingForContinueRelaunch, setIsWaitingForContinueRelaunch] = useState<boolean>(false);
-  const [previousIsWH3Running, setPreviousIsWH3Running] = useState<boolean>(isWH3Running);
 
   const localized: Record<string, string> = useContext(localizationContext);
 
@@ -70,87 +70,39 @@ const Sidebar = memo(() => {
 
   const playDelayTimeoutId = useRef<NodeJS.Timeout | undefined>(undefined);
   const continueDelayTimeoutId = useRef<NodeJS.Timeout | undefined>(undefined);
+  const isShiftDownRef = useRef(false);
+  const isControlDownRef = useRef(false);
 
   const terminateGameClicked = () => {
     window.api?.terminateGame();
   };
 
-  const playGameClicked = (forcedDelayTime?: number) => {
-    console.log("playGameClicked: play game clicked");
+  const playGameClicked = useCallback(
+    (forcedDelayTime?: number) => {
+      console.log("playGameClicked: play game clicked");
 
-    if (isWaitingForContinueRelaunch) return;
-    if (isWH3Running) {
-      setIsWaitingForRelaunch(!isWaitingForRelaunch);
-      console.log("playGameClicked: waiting for relaunch");
-      return;
-    }
-    if (
-      forcedDelayTime ||
-      removedModsData.some((removedModData) => Date.now() - removedModData.time < 3000)
-    ) {
-      console.log(
-        `playGameClicked: ${forcedDelayTime && "An enabled mod was recently removed. "}Waiting ${
-          forcedDelayTime || "3.5"
-        } seconds before starting.`,
-        Date.now()
-      );
-      if (!playDelayTimeoutId.current) {
-        playDelayTimeoutId.current = setTimeout(() => {
-          console.log("playGameClicked: triggering delayed play game", Date.now());
-          playDelayTimeoutId.current = undefined;
-          dispatch(createOnGameStartPreset());
-          window.api?.startGame(mods, areModsInOrder, {
-            isMakeUnitsGeneralsEnabled,
-            isSkipIntroMoviesEnabled,
-            isScriptLoggingEnabled,
-            isAutoStartCustomBattleEnabled,
-            isClosedOnPlay,
-            packDataOverwrites,
-            userFlowOptions,
-          });
-        }, forcedDelayTime || 3500);
+      if (isWaitingForContinueRelaunch) return;
+      if (isWH3Running) {
+        setIsWaitingForRelaunch(true);
+        console.log("playGameClicked: waiting for relaunch");
+        return;
       }
-      return;
-    }
-    dispatch(createOnGameStartPreset());
-    window.api?.startGame(mods, areModsInOrder, {
-      isMakeUnitsGeneralsEnabled,
-      isSkipIntroMoviesEnabled,
-      isScriptLoggingEnabled,
-      isAutoStartCustomBattleEnabled,
-      isClosedOnPlay,
-      packDataOverwrites,
-      userFlowOptions,
-    });
-  };
-
-  const onContinueGameClicked = (forcedDelayTime?: number) => {
-    if (isWaitingForRelaunch) return;
-
-    if (isWH3Running) {
-      setIsWaitingForContinueRelaunch(!isWaitingForContinueRelaunch);
-      console.log("onContinueGameClicked: waiting for relaunch");
-      return;
-    }
-
-    if (
-      forcedDelayTime ||
-      removedModsData.some((removedModData) => Date.now() - removedModData.time < 3000)
-    ) {
-      console.log(
-        `onContinueGameClicked: ${forcedDelayTime && "An enabled mod was recently removed. "}Waiting ${
-          forcedDelayTime || "3.5"
-        } seconds before starting.`,
-        Date.now()
-      );
-      if (!continueDelayTimeoutId.current) {
-        continueDelayTimeoutId.current = setTimeout(() => {
-          console.log("onContinueGameClicked: triggering delayed continue game", Date.now());
-          continueDelayTimeoutId.current = undefined;
-          window.api?.startGame(
-            mods,
-            areModsInOrder,
-            {
+      if (
+        forcedDelayTime ||
+        removedModsData.some((removedModData) => Date.now() - removedModData.time < 3000)
+      ) {
+        console.log(
+          `playGameClicked: ${forcedDelayTime && "An enabled mod was recently removed. "}Waiting ${
+            forcedDelayTime || "3.5"
+          } seconds before starting.`,
+          Date.now()
+        );
+        if (!playDelayTimeoutId.current) {
+          playDelayTimeoutId.current = setTimeout(() => {
+            console.log("playGameClicked: triggering delayed play game", Date.now());
+            playDelayTimeoutId.current = undefined;
+            dispatch(createOnGameStartPreset());
+            window.api?.startGame(mods, areModsInOrder, {
               isMakeUnitsGeneralsEnabled,
               isSkipIntroMoviesEnabled,
               isScriptLoggingEnabled,
@@ -158,18 +110,13 @@ const Sidebar = memo(() => {
               isClosedOnPlay,
               packDataOverwrites,
               userFlowOptions,
-            },
-            saves[0]?.name
-          );
-        }, forcedDelayTime || 3500);
+            });
+          }, forcedDelayTime || 3500);
+        }
+        return;
       }
-      return;
-    }
-
-    window.api?.startGame(
-      mods,
-      areModsInOrder,
-      {
+      dispatch(createOnGameStartPreset());
+      window.api?.startGame(mods, areModsInOrder, {
         isMakeUnitsGeneralsEnabled,
         isSkipIntroMoviesEnabled,
         isScriptLoggingEnabled,
@@ -177,24 +124,99 @@ const Sidebar = memo(() => {
         isClosedOnPlay,
         packDataOverwrites,
         userFlowOptions,
-      },
-      saves[0]?.name
-    );
-  };
+      });
+    },
+    [
+      areModsInOrder,
+      dispatch,
+      isAutoStartCustomBattleEnabled,
+      isClosedOnPlay,
+      isMakeUnitsGeneralsEnabled,
+      isScriptLoggingEnabled,
+      isSkipIntroMoviesEnabled,
+      isWaitingForContinueRelaunch,
+      isWH3Running,
+      mods,
+      packDataOverwrites,
+      removedModsData,
+      userFlowOptions,
+    ]
+  );
 
-  if (previousIsWH3Running != isWH3Running) {
-    setPreviousIsWH3Running(isWH3Running);
-    if (isWaitingForRelaunch && !isWH3Running) {
-      console.log("calling PLAYGAMECLICKED", previousIsWH3Running, isWH3Running, isWaitingForRelaunch);
-      setIsWaitingForRelaunch(false);
-      playGameClicked(1500);
-    }
-    if (isWaitingForContinueRelaunch && !isWH3Running) {
-      console.log("calling PLAYGAMECLICKED", previousIsWH3Running, isWH3Running, isWaitingForRelaunch);
-      setIsWaitingForContinueRelaunch(false);
-      onContinueGameClicked(1500);
-    }
-  }
+  const onContinueGameClicked = useCallback(
+    (forcedDelayTime?: number) => {
+      if (isWaitingForRelaunch) return;
+
+      if (isWH3Running) {
+        setIsWaitingForContinueRelaunch(true);
+        console.log("onContinueGameClicked: waiting for relaunch");
+        return;
+      }
+
+      if (
+        forcedDelayTime ||
+        removedModsData.some((removedModData) => Date.now() - removedModData.time < 3000)
+      ) {
+        console.log(
+          `onContinueGameClicked: ${forcedDelayTime && "An enabled mod was recently removed. "}Waiting ${
+            forcedDelayTime || "3.5"
+          } seconds before starting.`,
+          Date.now()
+        );
+        if (!continueDelayTimeoutId.current) {
+          continueDelayTimeoutId.current = setTimeout(() => {
+            console.log("onContinueGameClicked: triggering delayed continue game", Date.now());
+            continueDelayTimeoutId.current = undefined;
+            window.api?.startGame(
+              mods,
+              areModsInOrder,
+              {
+                isMakeUnitsGeneralsEnabled,
+                isSkipIntroMoviesEnabled,
+                isScriptLoggingEnabled,
+                isAutoStartCustomBattleEnabled,
+                isClosedOnPlay,
+                packDataOverwrites,
+                userFlowOptions,
+              },
+              latestSaveName
+            );
+          }, forcedDelayTime || 3500);
+        }
+        return;
+      }
+
+      window.api?.startGame(
+        mods,
+        areModsInOrder,
+        {
+          isMakeUnitsGeneralsEnabled,
+          isSkipIntroMoviesEnabled,
+          isScriptLoggingEnabled,
+          isAutoStartCustomBattleEnabled,
+          isClosedOnPlay,
+          packDataOverwrites,
+          userFlowOptions,
+        },
+        latestSaveName
+      );
+    },
+    [
+      areModsInOrder,
+      isAutoStartCustomBattleEnabled,
+      isClosedOnPlay,
+      isMakeUnitsGeneralsEnabled,
+      isScriptLoggingEnabled,
+      isSkipIntroMoviesEnabled,
+      isWaitingForRelaunch,
+      isWH3Running,
+      latestSaveName,
+      mods,
+      packDataOverwrites,
+      removedModsData,
+      userFlowOptions,
+    ]
+  );
 
   const options: OptionType[] = useAppSelector((state) =>
     state.app.presets.map((preset) => {
@@ -211,18 +233,12 @@ const Sidebar = memo(() => {
     console.log(name);
   };
 
-  let isShiftDown = false;
-  let isControlDown = false;
-
   const onChange = (newValue: SingleValue<OptionType>, actionMeta: ActionMeta<OptionType>) => {
     if (!newValue) return;
     console.log(`label: ${newValue.label}, value: ${newValue.value}, action: ${actionMeta.action}`);
     if (actionMeta.action !== "select-option") return;
 
-    let selectOperation = "unary" as SelectOperation;
-    if (isControlDown) selectOperation = "subtraction" as SelectOperation;
-    else if (isShiftDown) selectOperation = "addition" as SelectOperation;
-
+    const selectOperation = getPresetSelectOperation(isControlDownRef.current, isShiftDownRef.current);
     dispatch(selectPreset([newValue.value, selectOperation]));
   };
 
@@ -257,8 +273,9 @@ const Sidebar = memo(() => {
   const clearFilter = () => {
     dispatch(setFilter(""));
   };
+  const selectMenuPortalTarget = typeof document !== "undefined" ? document.body : null;
 
-  const getUpdateData = async () => {
+  const getUpdateData = useCallback(async () => {
     try {
       const appUpdateData = await window.api?.getUpdateData();
       if (!appUpdateData) return;
@@ -278,26 +295,26 @@ const Sidebar = memo(() => {
     } catch (err) {
       console.log(err);
     }
-  };
-  useEffect(() => {
-    if (!isUpdateCheckDone) {
-      setIsUpdateCheckDone(true);
-      getUpdateData();
-    }
+  }, []);
 
+  useEffect(() => {
+    void getUpdateData();
+  }, [getUpdateData]);
+
+  useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.ctrlKey && e.key === "f") {
         const filterInput = document.getElementById("filterInput");
         filterInput?.focus();
       }
 
-      if (e.key === "Shift") isShiftDown = true;
-      if (e.key === "Control") isControlDown = true;
+      if (e.key === "Shift") isShiftDownRef.current = true;
+      if (e.key === "Control") isControlDownRef.current = true;
     };
 
     const onKeyUp = (e: KeyboardEvent) => {
-      if (e.key === "Shift") isShiftDown = false;
-      if (e.key === "Control") isControlDown = false;
+      if (e.key === "Shift") isShiftDownRef.current = false;
+      if (e.key === "Control") isControlDownRef.current = false;
     };
 
     document.addEventListener("keydown", onKeyDown);
@@ -306,8 +323,37 @@ const Sidebar = memo(() => {
     return () => {
       document.removeEventListener("keydown", onKeyDown);
       document.removeEventListener("keyup", onKeyUp);
+      isShiftDownRef.current = false;
+      isControlDownRef.current = false;
     };
-  });
+  }, []);
+
+  useEffect(() => {
+    if (isWH3Running) return;
+
+    if (isWaitingForRelaunch) {
+      setIsWaitingForRelaunch(false);
+      playGameClicked(1500);
+    }
+
+    if (isWaitingForContinueRelaunch) {
+      setIsWaitingForContinueRelaunch(false);
+      onContinueGameClicked(1500);
+    }
+  }, [
+    isWH3Running,
+    isWaitingForContinueRelaunch,
+    isWaitingForRelaunch,
+    onContinueGameClicked,
+    playGameClicked,
+  ]);
+
+  useEffect(() => {
+    return () => {
+      if (playDelayTimeoutId.current) clearTimeout(playDelayTimeoutId.current);
+      if (continueDelayTimeoutId.current) clearTimeout(continueDelayTimeoutId.current);
+    };
+  }, []);
 
   const enabledMods = mods.filter(
     (iterMod) => iterMod.isEnabled || alwaysEnabledMods.find((mod) => mod.name === iterMod.name)
@@ -383,7 +429,7 @@ const Sidebar = memo(() => {
         setIsOpen={setIsShowingRequiredMods}
         modDependencies={missingModDependencies}
       />
-      <div className="fixed h-[90vh] z-[40]">
+      <div className="sidebar-shell">
         <div id="presetSection">
           <Tooltip
             placement="left"
@@ -405,6 +451,8 @@ const Sidebar = memo(() => {
             options={options}
             onChange={onChange}
             styles={selectStyle}
+            menuPortalTarget={selectMenuPortalTarget}
+            menuPosition="fixed"
             onCreateOption={(name) => newPresetMade(name)}
           ></Creatable>
           <div
@@ -443,6 +491,8 @@ const Sidebar = memo(() => {
                   options={options}
                   styles={selectStyle}
                   onChange={onReplaceChange}
+                  menuPortalTarget={selectMenuPortalTarget}
+                  menuPosition="fixed"
                   value={null}
                 ></Select>
               </div>
@@ -453,6 +503,8 @@ const Sidebar = memo(() => {
                   options={options}
                   styles={selectStyle}
                   onChange={onDeleteChange}
+                  menuPortalTarget={selectMenuPortalTarget}
+                  menuPosition="fixed"
                   value={null}
                 ></Select>
               </div>
@@ -479,7 +531,7 @@ const Sidebar = memo(() => {
           </span>
         </div>
 
-        <div className="absolute w-full bottom-0 z-10">
+        <div className="sidebar-actions-panel">
           {missingModDependencies.length > 0 && (
             <div className="text-center text-red-700 font-semibold mb-4">
               <div
@@ -604,7 +656,7 @@ const Sidebar = memo(() => {
           <div className="flex flex-col items-center">
             <button
               id="playGame"
-              className={`bg-green-500 hover:bg-green-700 text-white font-bold py-2 px-4 rounded h-14 w-36 m-auto ${
+              className={`bg-green-500 hover:bg-green-700 text-white font-bold py-2 px-4 rounded h-14 w-36 m-auto shadow-md ${
                 (isWH3Running && "bg-opacity-50 hover:bg-opacity-50 text-opacity-50 hover:text-opacity-50") ||
                 ""
               }`}
@@ -710,7 +762,7 @@ const Sidebar = memo(() => {
           </div>
         </div>
 
-        <div className="mt-6">
+        <div className="mt-4">
           <OptionsDrawer />
         </div>
         <div className="mt-4">
@@ -761,9 +813,7 @@ const Sidebar = memo(() => {
       </div>
 
       {isUpdateAvailable && (
-        <div
-          className={"dark fixed w-80 mx-auto inset-x-0 bottom-[1%] " + (isUpdateAvailable ? "" : "hidden")}
-        >
+        <div className={"dark fixed w-80 right-4 bottom-4 z-[250] " + (isUpdateAvailable ? "" : "hidden")}>
           <UpdateNotification
             downloadURL={downloadURL}
             releaseNotesURL={releaseNotesURL}
