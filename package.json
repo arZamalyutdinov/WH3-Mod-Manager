@@ -41,7 +41,7 @@
           "name": "@electron-forge/publisher-github",
           "config": {
             "repository": {
-              "owner": "Shazbot",
+              "owner": "arZamalyutdinov",
               "name": "WH3-Mod-Manager"
             }
           }

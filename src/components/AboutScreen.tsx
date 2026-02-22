@@ -4,6 +4,7 @@ import { FaGithub, FaSteam, FaPaypal, FaPatreon } from "react-icons/fa";
 import { Tooltip } from "flowbite-react";
 import appPackage from "../../package.json";
 import localizationContext from "../localizationContext";
+import { getGithubRepositoryUrl } from "../utility/githubRepo";
 
 export interface AboutScreenProps {
   isOpen: boolean;
@@ -12,6 +13,7 @@ export interface AboutScreenProps {
 
 const AboutScreen = memo(({ isOpen, setIsOpen }: AboutScreenProps) => {
   const localized: Record<string, string> = useContext(localizationContext);
+  const githubRepositoryUrl = getGithubRepositoryUrl();
 
   return (
     <>
@@ -47,8 +49,8 @@ const AboutScreen = memo(({ isOpen, setIsOpen }: AboutScreenProps) => {
                     </Tooltip>
                   </div>
                   <div>
-                    <Tooltip style={"light"} content={<p>https://github.com/Shazbot/WH3-Mod-Manager</p>}>
-                      <a href="https://github.com/Shazbot/WH3-Mod-Manager" target="_blank">
+                    <Tooltip style={"light"} content={<p>{githubRepositoryUrl}</p>}>
+                      <a href={githubRepositoryUrl} target="_blank">
                         <FaGithub size="3rem" />
                       </a>
                     </Tooltip>
