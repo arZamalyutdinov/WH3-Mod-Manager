@@ -56,6 +56,20 @@ jobs:
           echo "tag=$TAG" >> "$GITHUB_OUTPUT"
           echo "Resolved tag: $TAG"
 
+      - name: Sync package version to tag
+        shell: bash
+        env:
+          RELEASE_TAG: ${{ steps.meta.outputs.tag }}
+        run: |
+          VERSION="${RELEASE_TAG#v}"
+          if [ -z "$VERSION" ]; then
+            echo "Failed to derive version from tag: $RELEASE_TAG"
+            exit 1
+          fi
+
+          echo "Setting package.json version to $VERSION"
+          node -e "const fs=require('fs'); const tag=process.env.RELEASE_TAG || ''; const version=tag.replace(/^v/, ''); const pkg=JSON.parse(fs.readFileSync('package.json','utf8')); pkg.version=version; fs.writeFileSync('package.json', JSON.stringify(pkg, null, 2) + '\n');"
+
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
