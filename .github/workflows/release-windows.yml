@@ -60,10 +60,12 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 24.13.1
-          cache: yarn
 
-      - name: Enable Corepack
-        run: corepack enable
+      - name: Enable Corepack and activate Yarn 4
+        run: |
+          corepack enable
+          corepack prepare yarn@4.12.0 --activate
+          yarn --version
 
       - name: Ensure Yarn node-modules linker
         shell: bash
@@ -71,6 +73,16 @@ jobs:
           if [ ! -f .yarnrc.yml ]; then
             printf "nodeLinker: node-modules\n" > .yarnrc.yml
           fi
+
+      - name: Restore Yarn cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            .yarn/cache
+            .yarn/install-state.gz
+          key: ${{ runner.os }}-yarn4-${{ hashFiles('yarn.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-yarn4-
 
       - name: Install dependencies
         run: yarn install --immutable
