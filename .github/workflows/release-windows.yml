@@ -2,13 +2,15 @@ name: Release Windows
 
 on:
   push:
+    branches:
+      - master
     tags:
       - "v*"
   workflow_dispatch:
     inputs:
       tag:
         description: "Release tag (for example: v2.17.5)"
-        required: true
+        required: false
         type: string
 
 permissions:
@@ -21,6 +23,7 @@ concurrency:
 jobs:
   build-and-release:
     name: Build Windows artifact and publish release
+    if: ${{ github.event_name != 'push' || !startsWith(github.ref, 'refs/tags/') || github.actor != 'github-actions[bot]' }}
     runs-on: windows-latest
     timeout-minutes: 60
 
@@ -34,10 +37,32 @@ jobs:
         id: meta
         shell: bash
         run: |
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            TAG="${{ inputs.tag }}"
+          EVENT_NAME="${{ github.event_name }}"
+          REF_NAME="${{ github.ref_name }}"
+          INPUT_TAG="${{ inputs.tag }}"
+
+          if [ "$EVENT_NAME" = "workflow_dispatch" ] && [ -n "$INPUT_TAG" ]; then
+            TAG="$INPUT_TAG"
+            SOURCE="manual-input"
+          elif [ "$EVENT_NAME" = "push" ] && [[ "${{ github.ref }}" == refs/tags/* ]]; then
+            TAG="$REF_NAME"
+            SOURCE="push-tag"
           else
-            TAG="${{ github.ref_name }}"
+            LATEST_TAG="$(git tag --list 'v*' --sort=-version:refname | head -n1)"
+            if [ -z "$LATEST_TAG" ]; then
+              TAG="v0.0.1"
+            else
+              if [[ ! "$LATEST_TAG" =~ ^v([0-9]+)\.([0-9]+)\.([0-9]+)$ ]]; then
+                echo "Latest tag '$LATEST_TAG' does not match expected vMAJOR.MINOR.PATCH format."
+                exit 1
+              fi
+              MAJOR="${BASH_REMATCH[1]}"
+              MINOR="${BASH_REMATCH[2]}"
+              PATCH="${BASH_REMATCH[3]}"
+              NEXT_PATCH=$((PATCH + 1))
+              TAG="v${MAJOR}.${MINOR}.${NEXT_PATCH}"
+            fi
+            SOURCE="auto-increment"
           fi
 
           if [ -z "$TAG" ]; then
@@ -54,7 +79,9 @@ jobs:
           esac
 
           echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "tag_source=$SOURCE" >> "$GITHUB_OUTPUT"
           echo "Resolved tag: $TAG"
+          echo "Tag source: $SOURCE"
 
       - name: Sync package version to tag
         shell: bash
@@ -124,9 +151,12 @@ jobs:
             throw "No Windows zip release asset was generated in out/make/zip/win32."
           }
 
+          $zipSizeKb = [int][Math]::Ceiling($zip.Length / 1KB)
           "zip_path=$($zip.FullName)" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
           "zip_name=$($zip.Name)" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+          "zip_size_kb=$zipSizeKb" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
           Write-Host "Resolved zip asset: $($zip.Name)"
+          Write-Host "Resolved zip size (KB): $zipSizeKb"
 
       - name: Ensure NSIS is available
         id: nsis
@@ -165,6 +195,7 @@ jobs:
           RELEASE_TAG: ${{ steps.meta.outputs.tag }}
           RELEASE_REPOSITORY: ${{ github.repository }}
           RELEASE_ZIP_ASSET: ${{ steps.zipmeta.outputs.zip_name }}
+          RELEASE_ZIP_SIZE_KB: ${{ steps.zipmeta.outputs.zip_size_kb }}
         run: |
           $version = $env:RELEASE_TAG.TrimStart("v")
           $repoRoot = if ($env:GITHUB_WORKSPACE) { $env:GITHUB_WORKSPACE } else { (Get-Location).Path }
@@ -181,6 +212,7 @@ jobs:
             "/DRELEASE_TAG=$env:RELEASE_TAG" `
             "/DRELEASE_REPOSITORY=$env:RELEASE_REPOSITORY" `
             "/DRELEASE_ZIP_ASSET=$env:RELEASE_ZIP_ASSET" `
+            "/DRELEASE_ZIP_SIZE_KB=$env:RELEASE_ZIP_SIZE_KB" `
             "/DOUT_FILE=$installerOutFile" `
             $nsisScript
 
