@@ -240,7 +240,7 @@ const OptionsDrawer = memo(() => {
           >
             <h5
               id="drawer-label"
-              className="inline-flex items-center mb-4 text-base font-semibold text-gray-500 dark:text-gray-400 mt-6 cursor-default"
+              className="inline-flex items-center mb-4 text-base font-semibold text-slate-100 mt-6 cursor-default"
             >
               {localized.otherOptions}
             </h5>
@@ -269,7 +269,7 @@ const OptionsDrawer = memo(() => {
 
             <div className="flex mt-8">
               <button
-                className="inline-block px-6 py-2.5 bg-purple-600 text-white font-medium text-xs leading-tight rounded shadow-md hover:bg-purple-700 hover:shadow-lg focus:bg-purple-700 focus:shadow-lg focus:outline-none focus:ring-0 active:bg-purple-800 active:shadow-lg transition duration-150 ease-in-out m-auto w-[50%]"
+                className="inline-block px-6 py-2.5 bg-blue-700 text-white font-medium text-xs leading-tight rounded shadow-md hover:bg-blue-800 hover:shadow-lg focus:bg-blue-800 focus:shadow-lg focus:outline-none focus:ring-0 active:bg-blue-900 active:shadow-lg transition duration-150 ease-in-out m-auto w-[50%]"
                 onClick={() => setIsShowingAboutScreen(true)}
               >
                 <span className="uppercase">{localized.about}</span>
@@ -338,11 +338,11 @@ const OptionsDrawer = memo(() => {
             </div>
 
             <h6 className="mt-10">{localized.forceReDownload}</h6>
-            <p className="mb-3 text-sm text-gray-500 dark:text-gray-400">{localized.forceDownloadMsg}</p>
+            <p className="mb-3 text-sm text-slate-300">{localized.forceDownloadMsg}</p>
 
             <div className="flex mt-2">
               <button
-                className="inline-block px-6 py-2.5 bg-purple-600 text-white font-medium text-xs leading-tight rounded shadow-md hover:bg-purple-700 hover:shadow-lg focus:bg-purple-700 focus:shadow-lg focus:outline-none focus:ring-0 active:bg-purple-800 active:shadow-lg transition duration-150 ease-in-out m-auto w-[70%]"
+                className="inline-block px-6 py-2.5 bg-blue-700 text-white font-medium text-xs leading-tight rounded shadow-md hover:bg-blue-800 hover:shadow-lg focus:bg-blue-800 focus:shadow-lg focus:outline-none focus:ring-0 active:bg-blue-900 active:shadow-lg transition duration-150 ease-in-out m-auto w-[70%]"
                 onClick={(e) => {
                   const modIds = e.shiftKey
                     ? contentModsWorshopIds
@@ -357,11 +357,11 @@ const OptionsDrawer = memo(() => {
             </div>
 
             <h6 className="mt-10">{localized.forceResubscribe}</h6>
-            <p className="mb-3 text-sm text-gray-500 dark:text-gray-400">{localized.forceResubscribeMsg}</p>
+            <p className="mb-3 text-sm text-slate-300">{localized.forceResubscribeMsg}</p>
 
             <div className="flex mt-2">
               <button
-                className="inline-block px-6 py-2.5 bg-purple-600 text-white font-medium text-xs leading-tight rounded shadow-md hover:bg-purple-700 hover:shadow-lg focus:bg-purple-700 focus:shadow-lg focus:outline-none focus:ring-0 active:bg-purple-800 active:shadow-lg transition duration-150 ease-in-out m-auto w-[70%]"
+                className="inline-block px-6 py-2.5 bg-blue-700 text-white font-medium text-xs leading-tight rounded shadow-md hover:bg-blue-800 hover:shadow-lg focus:bg-blue-800 focus:shadow-lg focus:outline-none focus:ring-0 active:bg-blue-900 active:shadow-lg transition duration-150 ease-in-out m-auto w-[70%]"
                 onClick={(e) => {
                   const mods = e.shiftKey
                     ? currentMods.filter((mod) => !mod.isInData)
@@ -374,11 +374,11 @@ const OptionsDrawer = memo(() => {
             </div>
 
             <h6 className="mt-8">{localized.contentVsData}</h6>
-            <p className="mb-4 text-sm text-gray-500 dark:text-gray-400">{localized.contentVsDataMsg}</p>
+            <p className="mb-4 text-sm text-slate-300">{localized.contentVsDataMsg}</p>
 
             <div className="flex mt-2">
               <button
-                className="make-tooltip-w-full inline-block px-6 py-2.5 bg-purple-600 text-white font-medium text-xs leading-tight rounded shadow-md hover:bg-purple-700 hover:shadow-lg focus:bg-purple-700 focus:shadow-lg focus:outline-none focus:ring-0 active:bg-purple-800 active:shadow-lg transition duration-150 ease-in-out m-auto w-[70%]"
+                className="make-tooltip-w-full inline-block px-6 py-2.5 bg-blue-700 text-white font-medium text-xs leading-tight rounded shadow-md hover:bg-blue-800 hover:shadow-lg focus:bg-blue-800 focus:shadow-lg focus:outline-none focus:ring-0 active:bg-blue-900 active:shadow-lg transition duration-150 ease-in-out m-auto w-[70%]"
                 onClick={(e) => copyToData(e)}
               >
                 <Tooltip
@@ -400,7 +400,7 @@ const OptionsDrawer = memo(() => {
 
             <div className="flex mt-2 w-full">
               <button
-                className="make-tooltip-w-full inline-block px-6 py-2.5 bg-purple-600 text-white font-medium text-xs leading-tight rounded shadow-md hover:bg-purple-700 hover:shadow-lg focus:bg-purple-700 focus:shadow-lg focus:outline-none focus:ring-0 active:bg-purple-800 active:shadow-lg transition duration-150 ease-in-out m-auto w-[70%]"
+                className="make-tooltip-w-full inline-block px-6 py-2.5 bg-blue-700 text-white font-medium text-xs leading-tight rounded shadow-md hover:bg-blue-800 hover:shadow-lg focus:bg-blue-800 focus:shadow-lg focus:outline-none focus:ring-0 active:bg-blue-900 active:shadow-lg transition duration-150 ease-in-out m-auto w-[70%]"
                 onClick={() => cleanData()}
               >
                 <Tooltip placement="bottom" style="light" content={localized.cleanDataMsg}>
@@ -409,12 +409,12 @@ const OptionsDrawer = memo(() => {
               </button>
             </div>
 
-            <p className="mt-6 mb-4 text-sm text-gray-500 dark:text-gray-400">{localized.symLink}</p>
+            <p className="mt-6 mb-4 text-sm text-slate-300">{localized.symLink}</p>
 
             <div className="flex mt-2">
               <button
                 className={
-                  "make-tooltip-w-full inline-block px-6 py-2.5 bg-purple-600 text-white font-medium text-xs leading-tight rounded shadow-md hover:bg-purple-700 hover:shadow-lg focus:bg-purple-700 focus:shadow-lg focus:outline-none focus:ring-0 active:bg-purple-800 active:shadow-lg transition duration-150 ease-in-out m-auto w-[70%] " +
+                  "make-tooltip-w-full inline-block px-6 py-2.5 bg-blue-700 text-white font-medium text-xs leading-tight rounded shadow-md hover:bg-blue-800 hover:shadow-lg focus:bg-blue-800 focus:shadow-lg focus:outline-none focus:ring-0 active:bg-blue-900 active:shadow-lg transition duration-150 ease-in-out m-auto w-[70%] " +
                   ((!isAdmin &&
                     "bg-opacity-50 hover:bg-opacity-50 text-opacity-50 hover:text-opacity-50 cursor-not-allowed") ||
                     "")
@@ -441,7 +441,7 @@ const OptionsDrawer = memo(() => {
             </div>
             <div className="flex mt-2 w-full">
               <button
-                className="make-tooltip-w-full inline-block px-6 py-2.5 bg-purple-600 text-white font-medium text-xs leading-tight rounded shadow-md hover:bg-purple-700 hover:shadow-lg focus:bg-purple-700 focus:shadow-lg focus:outline-none focus:ring-0 active:bg-purple-800 active:shadow-lg transition duration-150 ease-in-out m-auto w-[70%]"
+                className="make-tooltip-w-full inline-block px-6 py-2.5 bg-blue-700 text-white font-medium text-xs leading-tight rounded shadow-md hover:bg-blue-800 hover:shadow-lg focus:bg-blue-800 focus:shadow-lg focus:outline-none focus:ring-0 active:bg-blue-900 active:shadow-lg transition duration-150 ease-in-out m-auto w-[70%]"
                 onClick={() => cleanSymbolicLinksInData()}
               >
                 <Tooltip placement="bottom" style="light" content={localized.cleanSymLinksMsg}>
@@ -451,7 +451,7 @@ const OptionsDrawer = memo(() => {
             </div>
 
             <h6 className="mt-10">{localized.hiddenMods}</h6>
-            <p className="mb-3 text-sm text-gray-500 dark:text-gray-400">{localized.unhideMods}</p>
+            <p className="mb-3 text-sm text-slate-300">{localized.unhideMods}</p>
 
             <div>
               <Select
@@ -465,41 +465,41 @@ const OptionsDrawer = memo(() => {
             </div>
 
             <h6 className="mt-10">{localized.shareMods}</h6>
-            <p className="mb-2 text-sm text-gray-500 dark:text-gray-400">{localized.shareModsMsg}</p>
+            <p className="mb-2 text-sm text-slate-300">{localized.shareModsMsg}</p>
             <div className="flex mt-2 w-full">
               <button
-                className="make-tooltip-w-full inline-block px-6 py-2 bg-purple-600 text-white font-medium text-xs leading-tight rounded shadow-md hover:bg-purple-700 hover:shadow-lg focus:bg-purple-700 focus:shadow-lg focus:outline-none focus:ring-0 active:bg-purple-800 active:shadow-lg transition duration-150 ease-in-out m-auto w-[70%]"
+                className="make-tooltip-w-full inline-block px-6 py-2 bg-blue-700 text-white font-medium text-xs leading-tight rounded shadow-md hover:bg-blue-800 hover:shadow-lg focus:bg-blue-800 focus:shadow-lg focus:outline-none focus:ring-0 active:bg-blue-900 active:shadow-lg transition duration-150 ease-in-out m-auto w-[70%]"
                 onClick={() => setIsShowingShareMods(true)}
               >
                 <span className="uppercase">{localized.shareModLists}</span>
               </button>
             </div>
-            <p className="mt-3 text-sm text-gray-500 dark:text-gray-400">{localized.copyModNames}</p>
+            <p className="mt-3 text-sm text-slate-300">{localized.copyModNames}</p>
             <div className="flex mt-2 w-full">
               <button
-                className="make-tooltip-w-full inline-block px-6 py-2 bg-purple-600 text-white font-medium text-xs leading-tight rounded shadow-md hover:bg-purple-700 hover:shadow-lg focus:bg-purple-700 focus:shadow-lg focus:outline-none focus:ring-0 active:bg-purple-800 active:shadow-lg transition duration-150 ease-in-out m-auto w-[70%]"
+                className="make-tooltip-w-full inline-block px-6 py-2 bg-blue-700 text-white font-medium text-xs leading-tight rounded shadow-md hover:bg-blue-800 hover:shadow-lg focus:bg-blue-800 focus:shadow-lg focus:outline-none focus:ring-0 active:bg-blue-900 active:shadow-lg transition duration-150 ease-in-out m-auto w-[70%]"
                 onClick={() => exportModNamesToClipboard(enabledMods)}
               >
                 <span className="uppercase">{localized.copyModList}</span>
               </button>
             </div>
-            <p className="mt-3 text-sm text-gray-500 dark:text-gray-400">
+            <p className="mt-3 text-sm text-slate-300">
               {localized.createSteamCollectionMsg}
             </p>
             <div className="flex mt-2 w-full">
               <button
-                className="make-tooltip-w-full inline-block px-6 py-2 bg-purple-600 text-white font-medium text-xs leading-tight rounded shadow-md hover:bg-purple-700 hover:shadow-lg focus:bg-purple-700 focus:shadow-lg focus:outline-none focus:ring-0 active:bg-purple-800 active:shadow-lg transition duration-150 ease-in-out m-auto w-[70%]"
+                className="make-tooltip-w-full inline-block px-6 py-2 bg-blue-700 text-white font-medium text-xs leading-tight rounded shadow-md hover:bg-blue-800 hover:shadow-lg focus:bg-blue-800 focus:shadow-lg focus:outline-none focus:ring-0 active:bg-blue-900 active:shadow-lg transition duration-150 ease-in-out m-auto w-[70%]"
                 onClick={() => dispatch(setIsCreateSteamCollectionOpen(true))}
               >
                 <span className="uppercase">{localized.createSteamCollection}</span>
               </button>
             </div>
-            <p className="mt-3 text-sm text-gray-500 dark:text-gray-400">
+            <p className="mt-3 text-sm text-slate-300">
               {localized.importSteamCollectionOptionsMsg}
             </p>
             <div className="flex mt-2 w-full">
               <button
-                className="make-tooltip-w-full inline-block px-6 py-2 bg-purple-600 text-white font-medium text-xs leading-tight rounded shadow-md hover:bg-purple-700 hover:shadow-lg focus:bg-purple-700 focus:shadow-lg focus:outline-none focus:ring-0 active:bg-purple-800 active:shadow-lg transition duration-150 ease-in-out m-auto w-[70%]"
+                className="make-tooltip-w-full inline-block px-6 py-2 bg-blue-700 text-white font-medium text-xs leading-tight rounded shadow-md hover:bg-blue-800 hover:shadow-lg focus:bg-blue-800 focus:shadow-lg focus:outline-none focus:ring-0 active:bg-blue-900 active:shadow-lg transition duration-150 ease-in-out m-auto w-[70%]"
                 onClick={() => dispatch(setIsImportSteamCollectionOpen(true))}
               >
                 <span className="uppercase">{localized.importSteamCollection}</span>
@@ -509,7 +509,7 @@ const OptionsDrawer = memo(() => {
             {gameToSupportedGameOptions[currentGame].length > 0 && (
               <>
                 <h6 className="mt-10">{localized.forModders}</h6>
-                <p className="mb-1 text-sm text-gray-500 dark:text-red-500">{localized.keepInSync}</p>
+                <p className="mb-1 text-sm text-amber-300">{localized.keepInSync}</p>
                 {gameToSupportedGameOptions[currentGame].includes("MakeUnitsGenerals") && (
                   <div className="flex items-center ml-1 mt-2">
                     <input
@@ -651,7 +651,7 @@ const OptionsDrawer = memo(() => {
             )}
 
             <h6 className="mt-10">{localized.compatCheckVanillaPacks}</h6>
-            <p className="mb-3 text-sm text-gray-500 dark:text-gray-400">
+            <p className="mb-3 text-sm text-slate-300">
               {localized.compatCheckVanillaPacksMsg}
             </p>
             <div className="flex mt-3 w-ful items-center">
@@ -668,10 +668,10 @@ const OptionsDrawer = memo(() => {
             </div>
 
             <h6 className="mt-10">{localized.setFolderPaths}</h6>
-            <p className="mb-4 text-sm text-gray-500 dark:text-gray-400">{localized.setFolderPathsMsg}</p>
+            <p className="mb-4 text-sm text-slate-300">{localized.setFolderPathsMsg}</p>
             <div className="flex mt-2 w-full">
               <button
-                className="make-tooltip-w-full inline-block px-6 py-2.5 bg-purple-600 text-white font-medium text-xs leading-tight rounded shadow-md hover:bg-purple-700 hover:shadow-lg focus:bg-purple-700 focus:shadow-lg focus:outline-none focus:ring-0 active:bg-purple-800 active:shadow-lg transition duration-150 ease-in-out m-auto w-[70%]"
+                className="make-tooltip-w-full inline-block px-6 py-2.5 bg-blue-700 text-white font-medium text-xs leading-tight rounded shadow-md hover:bg-blue-800 hover:shadow-lg focus:bg-blue-800 focus:shadow-lg focus:outline-none focus:ring-0 active:bg-blue-900 active:shadow-lg transition duration-150 ease-in-out m-auto w-[70%]"
                 onClick={() => setIsShowingSetFolderPaths(true)}
               >
                 <span className="uppercase">{localized.setFolderPaths}</span>
@@ -679,21 +679,21 @@ const OptionsDrawer = memo(() => {
             </div>
 
             <h6 className="mt-10">{localized.bisectModList}</h6>
-            <p className="text-sm text-gray-500 dark:text-gray-400">{localized.bisectModListMsg}</p>
+            <p className="text-sm text-slate-300">{localized.bisectModListMsg}</p>
             <div className="flex mt-2 w-full">
               <button
-                className="make-tooltip-w-full inline-block px-6 py-2.5 bg-purple-600 text-white font-medium text-xs leading-tight rounded shadow-md hover:bg-purple-700 hover:shadow-lg focus:bg-purple-700 focus:shadow-lg focus:outline-none focus:ring-0 active:bg-purple-800 active:shadow-lg transition duration-150 ease-in-out m-auto w-[70%]"
+                className="make-tooltip-w-full inline-block px-6 py-2.5 bg-blue-700 text-white font-medium text-xs leading-tight rounded shadow-md hover:bg-blue-800 hover:shadow-lg focus:bg-blue-800 focus:shadow-lg focus:outline-none focus:ring-0 active:bg-blue-900 active:shadow-lg transition duration-150 ease-in-out m-auto w-[70%]"
                 onClick={() => bisectModList()}
               >
                 <span className="uppercase">{localized.bisectModList}</span>
               </button>
             </div>
-            <p className="mt-4 text-sm text-gray-500 dark:text-gray-400">
+            <p className="mt-4 text-sm text-slate-300">
               {localized.bisectModListRandomMsg}
             </p>
             <div className="flex mt-2 mb-4 w-full">
               <button
-                className="make-tooltip-w-full inline-block px-6 py-2.5 bg-purple-600 text-white font-medium text-xs leading-tight rounded shadow-md hover:bg-purple-700 hover:shadow-lg focus:bg-purple-700 focus:shadow-lg focus:outline-none focus:ring-0 active:bg-purple-800 active:shadow-lg transition duration-150 ease-in-out m-auto w-[70%]"
+                className="make-tooltip-w-full inline-block px-6 py-2.5 bg-blue-700 text-white font-medium text-xs leading-tight rounded shadow-md hover:bg-blue-800 hover:shadow-lg focus:bg-blue-800 focus:shadow-lg focus:outline-none focus:ring-0 active:bg-blue-900 active:shadow-lg transition duration-150 ease-in-out m-auto w-[70%]"
                 onClick={() => bisectModList(true)}
               >
                 <span className="uppercase">{localized.bisectModListRandomly}</span>
@@ -701,12 +701,12 @@ const OptionsDrawer = memo(() => {
             </div>
 
             <h6 className="mt-10">{localized.searchInsidePacks}</h6>
-            <p className="text-sm text-gray-500 dark:text-gray-400">
+            <p className="text-sm text-slate-300">
               {localized.searchInsidePacksDescription}
             </p>
             <div className="flex mt-2 w-full">
               <button
-                className="make-tooltip-w-full inline-block px-6 py-2.5 bg-purple-600 text-white font-medium text-xs leading-tight rounded shadow-md hover:bg-purple-700 hover:shadow-lg focus:bg-purple-700 focus:shadow-lg focus:outline-none focus:ring-0 active:bg-purple-800 active:shadow-lg transition duration-150 ease-in-out m-auto w-[70%]"
+                className="make-tooltip-w-full inline-block px-6 py-2.5 bg-blue-700 text-white font-medium text-xs leading-tight rounded shadow-md hover:bg-blue-800 hover:shadow-lg focus:bg-blue-800 focus:shadow-lg focus:outline-none focus:ring-0 active:bg-blue-900 active:shadow-lg transition duration-150 ease-in-out m-auto w-[70%]"
                 onClick={() => dispatch(setIsPackSearcherOpen(true))}
               >
                 <span className="uppercase">{localized.searchInsidePacks}</span>

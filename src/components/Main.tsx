@@ -1,4 +1,4 @@
-import React, { RefObject } from "react";
+import React from "react";
 import { useAppSelector } from "../hooks";
 import Sidebar from "./Sidebar";
 import ModRows from "./ModRows";
@@ -8,7 +8,8 @@ import NodeEditor from "./NodeEditor";
 import { gameToPackWithDBTablesName } from "../supportedGames";
 
 type MainProps = {
-  scrollElement: RefObject<HTMLDivElement>;
+  scrollElement: HTMLDivElement | null;
+  setScrollElement: (element: HTMLDivElement | null) => void;
 };
 const Main = (props: MainProps) => {
   const currentTab = useAppSelector((state) => state.app.currentTab);
@@ -29,11 +30,15 @@ const Main = (props: MainProps) => {
         <NodeEditor currentFile={currentFlowFileSelection} currentPack={currentPack}></NodeEditor>
       )) ||
         (currentTab == "categories" && <Categories></Categories>) || (
-          <div className="mx-auto grid max-w-[110rem] grid-cols-1 gap-4 text-white xl:grid-cols-[minmax(0,1fr)_22rem]">
-            <div className="min-w-0">
+          <div className="mx-auto grid h-full max-w-[110rem] grid-cols-1 gap-4 text-white xl:grid-cols-[minmax(0,1fr)_22rem]">
+            <div
+              ref={props.setScrollElement}
+              id="mod-rows-scroll"
+              className="min-w-0 h-full overflow-y-auto pr-1 scrollbar scrollbar-track-gray-700 scrollbar-thumb-blue-700"
+            >
               <ModRows scrollElement={props.scrollElement} />
             </div>
-            <div className="min-w-0 xl:self-start">
+            <div className="min-w-0 h-full xl:self-start">
               <Sidebar />
             </div>
             <ModTagPicker></ModTagPicker>

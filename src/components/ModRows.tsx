@@ -1,7 +1,6 @@
 import React, {
   CSSProperties,
   memo,
-  RefObject,
   useCallback,
   useContext,
   useEffect,
@@ -43,7 +42,7 @@ import { getDragAutoScrollDelta } from "../utility/dragAutoScroll";
 const MemoizedFloatingOverlay = memo(FloatingOverlay);
 
 type ModRowsProps = {
-  scrollElement: RefObject<HTMLDivElement>;
+  scrollElement: HTMLDivElement | null;
 };
 
 const ModRows = memo((props: ModRowsProps) => {
@@ -732,8 +731,8 @@ const ModRows = memo((props: ModRowsProps) => {
             </span>
           </div>
 
-          {currentTab == "mods" && props.scrollElement.current && (
-            <WindowScroller scrollElement={props.scrollElement.current as Element}>
+          {currentTab == "mods" && props.scrollElement && (
+            <WindowScroller scrollElement={props.scrollElement}>
               {({ height, isScrolling, onChildScroll, scrollTop, registerChild }) => (
                 <AutoSizer disableHeight>
                   {({ width }) => (
@@ -756,7 +755,7 @@ const ModRows = memo((props: ModRowsProps) => {
                         rowRenderer={Row}
                         estimatedRowSize={areThumbnailsEnabled ? 104 : 32}
                         rowCount={visibleMods.length}
-                        overscanRowCount={areThumbnailsEnabled ? 6 : 12}
+                        overscanRowCount={areThumbnailsEnabled ? 4 : 8}
                         deferredMeasurementCache={cache}
                       />
                     </div>

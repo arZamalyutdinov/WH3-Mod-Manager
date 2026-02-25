@@ -8,7 +8,7 @@ import TopBar from "./components/TopBar";
 import { Toasts } from "./components/Toasts";
 import LeftSidebar from "./components/LeftSidebar";
 import Main from "./components/Main";
-import { StrictMode, useRef, Suspense, useEffect } from "react";
+import { StrictMode, Suspense, useEffect } from "react";
 import LocalizationContext, { staticTextIds, useLocalizations } from "./localizationContext";
 import { useAppSelector } from "./hooks";
 import { perfMonitor, startTiming, endTiming } from "./utility/performanceMonitor";
@@ -74,7 +74,7 @@ const App = React.memo(() => {
       });
   }, [currentLanguage]);
 
-  const scrollElement = useRef<HTMLDivElement>(null);
+  const [scrollElement, setScrollElement] = React.useState<HTMLDivElement | null>(null);
 
   return (
     <LocalizationContext.Provider value={localization}>
@@ -86,18 +86,14 @@ const App = React.memo(() => {
       >
         <TopBar />
         {(window.location.pathname.includes("/main_window") && (
-          <div
-            ref={scrollElement}
-            id="mod-rows-scroll"
-            className="mx-auto h-[calc(100vh-28px)] overflow-y-auto px-2 pb-6 pt-3 md:px-4 scrollbar scrollbar-track-gray-700 scrollbar-thumb-blue-700"
-          >
+          <div className="mx-auto h-[calc(100vh-28px)] px-2 pb-3 pt-3 md:px-4">
             <Onboarding></Onboarding>
-            <div className="mx-auto grid max-w-[124rem] grid-cols-1 gap-4 xl:grid-cols-[15rem_minmax(0,1fr)]">
+            <div className="mx-auto grid h-full max-w-[124rem] grid-cols-1 gap-4 xl:grid-cols-[15rem_minmax(0,1fr)]">
               <div className="min-w-0 xl:self-start">
                 <LeftSidebar />
               </div>
-              <div className="min-w-0">
-                <Main scrollElement={scrollElement} />
+              <div className="min-w-0 h-full">
+                <Main scrollElement={scrollElement} setScrollElement={setScrollElement} />
               </div>
             </div>
           </div>
