@@ -53,6 +53,7 @@ import { dataFromBackend, doneRequests, packDataStore } from "@/src/components/v
 import { tableNameWithDBPrefix } from "@/src/utility/packFileHelpers";
 import { buildConfigSaveSignature, buildReadModsSignature, getReadModsSelection } from "./rendererConfigSync";
 import { buildCustomizableModsSignature, buildStringArraySignature } from "./utility/signatureHelpers";
+import { shouldIgnoreWindowError } from "./rendererErrorFilter";
 
 console.log("IN RENDERER");
 
@@ -84,9 +85,15 @@ console.log = (...args) => {
 console.log(`isMain: ${isMain}, isViewer: ${isViewer}, isSkills: ${isSkills}`);
 
 window.addEventListener("error", (e) => {
+  const message = e.error instanceof Error ? e.error.message : e.message || "";
+  if (shouldIgnoreWindowError(message)) {
+    // This browser warning is noisy and non-fatal; suppress it so it doesn't flood logs.
+    e.preventDefault();
+    return;
+  }
+
   const error = e.error instanceof Error ? e.error.stack || e.error.message : `${e.message}`;
   log.error("Unhandled renderer error:", error);
-  console.log(e);
 });
 
 window.addEventListener("unhandledrejection", (e) => {

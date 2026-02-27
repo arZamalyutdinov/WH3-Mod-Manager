@@ -191,7 +191,15 @@ if (!gotTheLock) {
     mainWindowState.manage(windows.mainWindow);
 
     windows.mainWindow.webContents.on("console-message", (_event, level, message, line, sourceId) => {
-      console.log(`renderer-console[level=${level}] ${message} (${sourceId}:${line})`);
+      if (isDev) {
+        console.log(`renderer-console[level=${level}] ${message} (${sourceId}:${line})`);
+        return;
+      }
+
+      // Keep packaged logs focused: mirror renderer warnings/errors only.
+      if (level >= 2) {
+        console.log(`renderer-console[level=${level}] ${message} (${sourceId}:${line})`);
+      }
     });
 
     windows.mainWindow.webContents.on("did-start-loading", () => {

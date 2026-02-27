@@ -1,6 +1,7 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+@config "../tailwind.config.js";
+@import "tailwindcss";
+@source "./**/*.{js,jsx,ts,tsx,html}";
+@source "../node_modules/flowbite-react/**/*.{js,jsx,ts,tsx}";
 
 /* latin-ext */
 @font-face {
