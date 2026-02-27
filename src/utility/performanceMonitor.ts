@@ -150,7 +150,7 @@ export const trackComponentLoad = (componentName: string, startTime: number) =>
   perfMonitor.trackComponentLoad(componentName, startTime);
 
 // Development helper - log performance report
-if (process.env.NODE_ENV === "development") {
+if (typeof process !== "undefined" && process.env.NODE_ENV === "development") {
   // Log performance report after app is fully loaded
   setTimeout(() => {
     console.log(perfMonitor.getFormattedReport());

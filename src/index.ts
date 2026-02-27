@@ -71,7 +71,69 @@ if (!gotTheLock) {
     };
   }
 
-  let checkWH3RunningInterval: NodeJS.Timer;
+  let checkWH3RunningInterval: NodeJS.Timeout | undefined;
+  let waitForModDownloadsInterval: NodeJS.Timeout | undefined;
+  let hasRegisteredIpcMainListeners = false;
+  let hasRegisteredMainIpcHandlers = false;
+  let hasRegisteredAutoUpdaterListeners = false;
+
+  const waitForModIdToLastDownloadAttempt = new Map<string, number>();
+  const downloadRetryCooldownMs = 60 * 1000;
+
+  const waitForModDownloads = async () => {
+    if (appData.waitForModIds.length == 0) return;
+
+    const contentFolder = appData.gamesToGameFolderPaths[appData.currentGame].contentFolder;
+    if (!contentFolder) return;
+
+    const downloadsFolder = nodePath.join(contentFolder, "..", "..", "downloads");
+    console.log("downloads folder:", downloadsFolder);
+
+    // should we stop if something is currently being downloaded? after some testing, no
+    // if (globSync(`*${gameToSteamId[appData.currentGame]}*`, { cwd: downloadsFolder }).length != 0) {
+    //   console.log("something for the current game is being downloaded!");
+    //   return;
+    // }
+
+    const toRemoveFromWaitForModIds: string[] = [];
+    const idsToDownload: string[] = [];
+    const now = Date.now();
+    for (const modId of appData.waitForModIds) {
+      console.log("checking", nodePath.join(contentFolder, modId));
+      if (globSync("*.pack", { cwd: nodePath.join(contentFolder, modId) }).length == 0) {
+        const lastAttemptAt = waitForModIdToLastDownloadAttempt.get(modId) ?? 0;
+        if (now - lastAttemptAt >= downloadRetryCooldownMs) {
+          idsToDownload.push(modId);
+        }
+      } else {
+        toRemoveFromWaitForModIds.push(modId);
+      }
+    }
+
+    console.log("ids to download:", idsToDownload);
+    if (idsToDownload.length > 0) {
+      for (const modId of idsToDownload) {
+        waitForModIdToLastDownloadAttempt.set(modId, now);
+      }
+      fork(
+        nodePath.join(__dirname, "sub.js"),
+        [gameToSteamId[appData.currentGame], "download", idsToDownload.join(";")],
+        {}
+      );
+    }
+
+    appData.waitForModIds = appData.waitForModIds.filter(
+      (modId) => !toRemoveFromWaitForModIds.includes(modId)
+    );
+    for (const modId of toRemoveFromWaitForModIds) {
+      waitForModIdToLastDownloadAttempt.delete(modId);
+    }
+  };
+
+  const ensureWaitForModDownloadsLoop = () => {
+    if (waitForModDownloadsInterval) return;
+    waitForModDownloadsInterval = setInterval(waitForModDownloads, 3500);
+  };
 
   const createWindow = (): void => {
     i18n.on("loaded", async () => {
@@ -113,8 +175,8 @@ if (!gotTheLock) {
         height: 28,
       },
       webPreferences: {
-        nodeIntegration: true,
-        contextIsolation: false,
+        nodeIntegration: false,
+        contextIsolation: true,
         preload: MAIN_WINDOW_PRELOAD_WEBPACK_ENTRY,
         spellcheck: false,
       },
@@ -154,23 +216,26 @@ if (!gotTheLock) {
       }, 25000);
     }
 
-    autoUpdater.on("update-downloaded", (event, releaseNotes, releaseName) => {
-      const dialogOpts = {
-        type: "info" as const,
-        buttons: ["Restart", "Later"],
-        title: "Application Update",
-        message: process.platform === "win32" ? releaseNotes : releaseName,
-        detail: "A new version has been downloaded. Restart the application to apply the updates.",
-      };
+    if (!hasRegisteredAutoUpdaterListeners) {
+      hasRegisteredAutoUpdaterListeners = true;
+      autoUpdater.on("update-downloaded", (event, releaseNotes, releaseName) => {
+        const dialogOpts = {
+          type: "info" as const,
+          buttons: ["Restart", "Later"],
+          title: "Application Update",
+          message: process.platform === "win32" ? releaseNotes : releaseName,
+          detail: "A new version has been downloaded. Restart the application to apply the updates.",
+        };
 
-      dialog.showMessageBox(dialogOpts).then((returnValue) => {
-        if (returnValue.response === 0) autoUpdater.quitAndInstall();
+        dialog.showMessageBox(dialogOpts).then((returnValue) => {
+          if (returnValue.response === 0) autoUpdater.quitAndInstall();
+        });
       });
-    });
-    autoUpdater.on("error", (message) => {
-      console.error("There was a problem updating the application");
-      console.error(message);
-    });
+      autoUpdater.on("error", (message) => {
+        console.error("There was a problem updating the application");
+        console.error(message);
+      });
+    }
 
     windows.mainWindow.on("page-title-updated", (evt) => {
       evt.preventDefault();
@@ -181,64 +246,19 @@ if (!gotTheLock) {
       if (windows.skillsWindow) windows.skillsWindow.close();
     });
 
-    const waitForModIdToLastDownloadAttempt = new Map<string, number>();
-    const downloadRetryCooldownMs = 60 * 1000;
+    ensureWaitForModDownloadsLoop();
 
-    const waitForModDownloads = async () => {
-      if (appData.waitForModIds.length == 0) return;
+    if (!hasRegisteredIpcMainListeners) {
+      registerIpcMainListeners(windows.mainWindow, isDev);
+      hasRegisteredIpcMainListeners = true;
+    }
 
-      const contentFolder = appData.gamesToGameFolderPaths[appData.currentGame].contentFolder;
-      if (!contentFolder) return;
-
-      const downloadsFolder = nodePath.join(contentFolder, "..", "..", "downloads");
-      console.log("downloads folder:", downloadsFolder);
-
-      // should we stop if something is currently being downloaded? after some testing, no
-      // if (globSync(`*${gameToSteamId[appData.currentGame]}*`, { cwd: downloadsFolder }).length != 0) {
-      //   console.log("something for the current game is being downloaded!");
-      //   return;
-      // }
-
-      const toRemoveFromWaitForModIds: string[] = [];
-      const idsToDownload: string[] = [];
-      const now = Date.now();
-      for (const modId of appData.waitForModIds) {
-        console.log("checking", nodePath.join(contentFolder, modId));
-        if (globSync("*.pack", { cwd: nodePath.join(contentFolder, modId) }).length == 0) {
-          const lastAttemptAt = waitForModIdToLastDownloadAttempt.get(modId) ?? 0;
-          if (now - lastAttemptAt >= downloadRetryCooldownMs) {
-            idsToDownload.push(modId);
-          }
-        } else {
-          toRemoveFromWaitForModIds.push(modId);
-        }
-      }
-
-      console.log("ids to download:", idsToDownload);
-      if (idsToDownload.length > 0) {
-        for (const modId of idsToDownload) {
-          waitForModIdToLastDownloadAttempt.set(modId, now);
-        }
-        fork(
-          nodePath.join(__dirname, "sub.js"),
-          [gameToSteamId[appData.currentGame], "download", idsToDownload.join(";")],
-          {}
-        );
-      }
-
-      appData.waitForModIds = appData.waitForModIds.filter(
-        (modId) => !toRemoveFromWaitForModIds.includes(modId)
-      );
-      for (const modId of toRemoveFromWaitForModIds) {
-        waitForModIdToLastDownloadAttempt.delete(modId);
-      }
-    };
-    setInterval(waitForModDownloads, 3500);
-
-    registerIpcMainListeners(windows.mainWindow, isDev);
-
-    ipcMain.removeHandler("getUpdateData");
-    ipcMain.handle("getUpdateData", async () => {
+    if (!hasRegisteredMainIpcHandlers) {
+      hasRegisteredMainIpcHandlers = true;
+      ipcMain.removeHandler("getUpdateData");
+      ipcMain.removeHandler("downloadAndInstallUpdate");
+      ipcMain.removeAllListeners("sendApiExists");
+      ipcMain.handle("getUpdateData", async () => {
       // if (isDev) return;
 
       // clean up the temp_update folder
@@ -522,6 +542,7 @@ if (!gotTheLock) {
         checkWH3RunningInterval = setTimeout(isGameRuningCheck, 500);
       }
     });
+    }
   };
 
   app.on("second-instance", () => {
@@ -556,6 +577,17 @@ if (!gotTheLock) {
     })
       .then((name) => console.log(`Added Extension:  ${name}`))
       .catch((err) => console.log("An error occurred: ", err));
+  });
+
+  app.on("before-quit", () => {
+    if (waitForModDownloadsInterval) {
+      clearInterval(waitForModDownloadsInterval);
+      waitForModDownloadsInterval = undefined;
+    }
+    if (checkWH3RunningInterval) {
+      clearTimeout(checkWH3RunningInterval);
+      checkWH3RunningInterval = undefined;
+    }
   });
 
   // Quit when all windows are closed, except on macOS. There, it's common

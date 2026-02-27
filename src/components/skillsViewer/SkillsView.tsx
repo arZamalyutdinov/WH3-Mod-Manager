@@ -32,7 +32,7 @@ import groupBy from "object.groupby";
 
 import "reactflow/dist/style.css";
 import Skill, { SkillData } from "./Skill";
-import { Dropdown } from "flowbite-react";
+import { Dropdown, DropdownItem } from "flowbite-react";
 import AddNodeModal from "./AddNodeModal";
 import { Modal } from "../../flowbite/components/Modal/index";
 
@@ -159,7 +159,7 @@ tooltipFrame = require("../../assets/skills//tooltip_frame.png");
 skillLevelLitIcon = require("../../assets/skills//skills_tab_level_lit.png");
 
 const nodeWidth = 300;
-let nodeHeight = 100;
+const nodeHeight = 100;
 const biggerNodeHeight = 120;
 const editModeNodeHeight = 160; // Larger spacing for edit/requirements mode
 
@@ -925,7 +925,7 @@ const SkillsView = memo(
     // Helper: remove placeholders in affected rows and regenerate them based on current skill positions
     const repositionPlaceholders = useCallback(
       (currentNodes: Nodes[], affectedRows: Set<number>) => {
-        let result = currentNodes.filter(
+        const result = currentNodes.filter(
           (n) =>
             !(
               n.type === "addPlaceholder" && affectedRows.has(Math.round(n.position.y / effectiveNodeHeight))
@@ -3462,7 +3462,7 @@ const SkillsView = memo(
         const oldHeight = editModeNodeHeight;
 
         setNodes((currentNodes) => {
-          let result = currentNodes
+          const result = currentNodes
             // Remove placeholder nodes
             .filter((n) => n.type !== "addPlaceholder")
             .map((n) => {
@@ -3950,7 +3950,7 @@ const SkillsView = memo(
             <div className="flex gap-2 items-start">
               <div className="hover:bg-gray-700 dark:border-gray-600 border-2 rounded-lg w-fit">
                 <Dropdown dismissOnClick={false} label={localized.options}>
-                  <Dropdown.Item>
+                  <DropdownItem>
                     <div className="flex items-center min-w-[18em]">
                       <label htmlFor="isShowingHiddentSkillsCheckbox">
                         <input
@@ -3964,8 +3964,8 @@ const SkillsView = memo(
                         <span className="ml-2">{localized.showHiddenSkills}</span>
                       </label>
                     </div>
-                  </Dropdown.Item>
-                  <Dropdown.Item>
+                  </DropdownItem>
+                  <DropdownItem>
                     <div className="flex items-center">
                       <label htmlFor="isShowingHiddenModifiersInsideSkillsCheckbox">
                         <input
@@ -3979,8 +3979,8 @@ const SkillsView = memo(
                         <span className="ml-2">{localized.showHiddenModifiersInsideSkills}</span>
                       </label>
                     </div>
-                  </Dropdown.Item>
-                  <Dropdown.Item>
+                  </DropdownItem>
+                  <DropdownItem>
                     <div className="flex items-center">
                       <label htmlFor="isCheckingSkillRequirementsCheckbox">
                         <input
@@ -3994,9 +3994,9 @@ const SkillsView = memo(
                         <span className="ml-2">{localized.checkSkillRequirements}</span>
                       </label>
                     </div>
-                  </Dropdown.Item>
+                  </DropdownItem>
                   {/* localizing subtype is actually not that useful since we want names_ */}
-                  {/* <Dropdown.Item>
+                  {/* <DropdownItem>
                 <div className="flex items-center">
                   <label htmlFor="isLocalizingSubtypesCheckbox">
                     <input
@@ -4010,7 +4010,7 @@ const SkillsView = memo(
                     <span className="ml-2">{localized.showHiddenModifiersInsideSkills}</span>
                   </label>
                 </div>
-              </Dropdown.Item> */}
+              </DropdownItem> */}
                 </Dropdown>
               </div>
               {isFeaturesForModdersEnabled && (
@@ -4034,13 +4034,13 @@ const SkillsView = memo(
                       : displayFactionOptions.find((o) => o.value === factionFilter)?.label || factionFilter
                   }
                 >
-                  <Dropdown.Item onClick={() => setFactionFilter("all")}>
+                  <DropdownItem onClick={() => setFactionFilter("all")}>
                     <span>{localized.all || "All"}</span>
-                  </Dropdown.Item>
+                  </DropdownItem>
                   {displayFactionOptions.map((option) => (
-                    <Dropdown.Item key={option.value} onClick={() => setFactionFilter(option.value)}>
+                    <DropdownItem key={option.value} onClick={() => setFactionFilter(option.value)}>
                       <span>{option.label}</span>
-                    </Dropdown.Item>
+                    </DropdownItem>
                   ))}
                 </Dropdown>
               </div>
@@ -4111,7 +4111,7 @@ const SkillsView = memo(
 
                     <div className="hover:bg-green-700 bg-green-600 dark:border-gray-600 border-2 rounded-lg w-fit">
                       <Dropdown dismissOnClick={false} label={localized.json || "JSON"} color={"info"}>
-                        <Dropdown.Item>
+                        <DropdownItem>
                           <button
                             className="px-4 py-2 rounded-lg border-2 dark:border-gray-600 hover:bg-gray-700"
                             onClick={() => importInputRef.current?.click()}
@@ -4125,21 +4125,21 @@ const SkillsView = memo(
                             onChange={onImport}
                             className="hidden"
                           />
-                        </Dropdown.Item>
-                        <Dropdown.Item>
+                        </DropdownItem>
+                        <DropdownItem>
                           <button
                             className="px-4 py-2 rounded-lg border-2 dark:border-gray-600 hover:bg-gray-700"
                             onClick={onExport}
                           >
                             {localized.export || "Export"}
                           </button>
-                        </Dropdown.Item>
+                        </DropdownItem>
                       </Dropdown>
                     </div>
 
                     <div className="hover:bg-green-700 bg-green-600 dark:border-gray-600 border-2 rounded-lg w-fit">
                       <Dropdown dismissOnClick={false} label={localized.save} color={"success"}>
-                        <Dropdown.Item>
+                        <DropdownItem>
                           <button
                             className="w-36 px-4 py-2 rounded-lg border-2 dark:border-gray-600 hover:bg-blue-700 bg-blue-600 text-white"
                             onClick={() => {
@@ -4155,8 +4155,8 @@ const SkillsView = memo(
                           >
                             {localized.savePack || "Save Whole Tree"}
                           </button>
-                        </Dropdown.Item>
-                        <Dropdown.Item>
+                        </DropdownItem>
+                        <DropdownItem>
                           <button
                             className="w-36 px-4 py-2 rounded-lg border-2 dark:border-gray-600 hover:bg-green-700 bg-green-600 text-white"
                             onClick={() => {
@@ -4172,7 +4172,7 @@ const SkillsView = memo(
                           >
                             {localized.saveOnlyChanges || "Save Only Changes"}
                           </button>
-                        </Dropdown.Item>
+                        </DropdownItem>
                       </Dropdown>
                     </div>
 

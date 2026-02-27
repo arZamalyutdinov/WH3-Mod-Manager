@@ -49,6 +49,17 @@ var __generator = (this && this.__generator) || function (thisArg, body) {
 Object.defineProperty(exports, "__esModule", { value: true });
 var steamworks = require("./../steamworks");
 var fs = require("fs");
+var workshopIdPattern = /^\d+$/;
+var steamCommandDelayMs = 250;
+var steamDependencyDelayMs = 100;
+var sleep = function (ms) { return new Promise(function (resolve) { return setTimeout(resolve, ms); }); };
+var normalizeWorkshopIds = function (idsArg, delimiter) {
+    return Array.from(new Set((idsArg !== null && idsArg !== void 0 ? idsArg : "")
+        .split(delimiter)
+        .map(function (id) { return id.trim(); })
+        .filter(function (id) { return workshopIdPattern.test(id); })));
+};
+var toBigIntIds = function (ids) { return ids.map(function (id) { return BigInt(id); }); };
 if (process.argv[3] == "justRun") {
     console.log("justRun");
     steamworks.init(Number(process.argv[2]));
@@ -73,35 +84,52 @@ if (process.argv[3] == "getSubscribedIds") {
 }
 if (process.argv[3] == "download") {
     console.log("download");
-    var ids = process.argv[4].split(";"); //"2856936614";
+    var ids_1 = normalizeWorkshopIds(process.argv[4], ";");
     var client_1 = steamworks.init(Number(process.argv[2]));
-    ids.forEach(function (id) { return __awaiter(void 0, void 0, void 0, function () {
-        var success, e_1;
-        return __generator(this, function (_a) {
-            switch (_a.label) {
-                case 0:
-                    _a.trys.push([0, 2, , 3]);
-                    success = client_1.workshop.download(BigInt(id), false);
-                    if (process.send)
-                        process.send("for id: " + success);
-                    return [4 /*yield*/, new Promise(function (resolve) { return setTimeout(resolve, 300); })];
-                case 1:
-                    _a.sent();
-                    return [3 /*break*/, 3];
-                case 2:
-                    e_1 = _a.sent();
-                    return [3 /*break*/, 3];
-                case 3: return [2 /*return*/];
-            }
-        });
-    }); });
-    setTimeout(function () {
-        process.exit();
-    }, 300);
+    if (ids_1.length == 0) {
+        setTimeout(function () {
+            process.exit();
+        }, 50);
+    }
+    else {
+        void (function () { return __awaiter(void 0, void 0, void 0, function () {
+            var _i, ids_2, id, success;
+            return __generator(this, function (_a) {
+                switch (_a.label) {
+                    case 0:
+                        _i = 0, ids_2 = ids_1;
+                        _a.label = 1;
+                    case 1:
+                        if (!(_i < ids_2.length)) return [3 /*break*/, 4];
+                        id = ids_2[_i];
+                        try {
+                            success = client_1.workshop.download(BigInt(id), false);
+                            if (process.send)
+                                process.send("for id " + id + ": " + success);
+                        }
+                        catch (e) {
+                            /* empty */
+                        }
+                        return [4 /*yield*/, sleep(steamCommandDelayMs)];
+                    case 2:
+                        _a.sent();
+                        _a.label = 3;
+                    case 3:
+                        _i++;
+                        return [3 /*break*/, 1];
+                    case 4:
+                        setTimeout(function () {
+                            process.exit();
+                        }, 200);
+                        return [2 /*return*/];
+                }
+            });
+        }); })();
+    }
 }
 if (process.argv[3] == "unsubscribe") {
     console.log("unsubscribe");
-    var ids = process.argv[4].split(";");
+    var ids = normalizeWorkshopIds(process.argv[4], ";");
     var client_2 = steamworks.init(Number(process.argv[2]));
     ids.forEach(function (id) {
         try {
@@ -123,8 +151,8 @@ var getAuthors = function (client, ids, cb) {
     }
     var authorsMap = new Map();
     var unknownAuthors = [];
-    for (var _i = 0, ids_1 = ids; _i < ids_1.length; _i++) {
-        var authorId = ids_1[_i];
+    for (var _i = 0, ids_3 = ids; _i < ids_3.length; _i++) {
+        var authorId = ids_3[_i];
         // Method 1: Use the convenience function (requests info and returns current name)
         var authorName = client.friends.getUserName(authorId);
         // If the name is "[unknown]", wait a bit for the download and try again
@@ -146,50 +174,87 @@ var getAuthors = function (client, ids, cb) {
 };
 if (process.argv[3] == "getAuthors") {
     console.log("getAuthors");
-    var ids = process.argv[4].split(",").map(function (id) { return BigInt(id); });
+    var ids = toBigIntIds(normalizeWorkshopIds(process.argv[4], ","));
     var client = steamworks.init(Number(process.argv[2]));
-    getAuthors(client, ids, function (authorsMap) {
+    if (ids.length == 0) {
         if (process.send)
-            process.send(authorsMap);
+            process.send({});
         setTimeout(function () {
             process.exit();
-        }, 200);
-    });
+        }, 50);
+    }
+    else {
+        getAuthors(client, ids, function (authorsMap) {
+            if (process.send)
+                process.send(authorsMap);
+            setTimeout(function () {
+                process.exit();
+            }, 200);
+        });
+    }
 }
 var getDependencies = function (client, ids, cb) {
     if (!process.send) {
         process.exit();
     }
     var dependenciesMap = new Map();
-    var promises = ids.map(function (id) {
-        return new Promise(function (resolve, reject) {
-            client.workshop
-                .getItemDependencies(id)
-                .then(function (dependencyIds) {
-                dependenciesMap.set(id.toString(), dependencyIds.map(function (depId) { return depId.toString(); }));
-                resolve();
-            })
-                .catch(function (e) {
-                fs.appendFileSync("sublog.txt", "ERROR:");
-                fs.appendFileSync("sublog.txt", e.toString());
-            });
+    void (function () { return __awaiter(void 0, void 0, void 0, function () {
+        var _i, ids_4, id, dependencyIds, e_1;
+        return __generator(this, function (_a) {
+            switch (_a.label) {
+                case 0:
+                    _i = 0, ids_4 = ids;
+                    _a.label = 1;
+                case 1:
+                    if (!(_i < ids_4.length)) return [3 /*break*/, 8];
+                    id = ids_4[_i];
+                    _a.label = 2;
+                case 2:
+                    _a.trys.push([2, 4, , 5]);
+                    return [4 /*yield*/, client.workshop.getItemDependencies(id)];
+                case 3:
+                    dependencyIds = _a.sent();
+                    dependenciesMap.set(id.toString(), dependencyIds.map(function (depId) { return depId.toString(); }));
+                    return [3 /*break*/, 5];
+                case 4:
+                    e_1 = _a.sent();
+                    fs.appendFileSync("sublog.txt", "ERROR:");
+                    fs.appendFileSync("sublog.txt", String(e_1));
+                    return [3 /*break*/, 5];
+                case 5: return [4 /*yield*/, sleep(steamDependencyDelayMs)];
+                case 6:
+                    _a.sent();
+                    _a.label = 7;
+                case 7:
+                    _i++;
+                    return [3 /*break*/, 1];
+                case 8:
+                    cb(dependenciesMap);
+                    return [2 /*return*/];
+            }
         });
-    });
-    Promise.allSettled(promises).then(function () {
-        cb(dependenciesMap);
-    });
+    }); })();
 };
 if (process.argv[3] == "getDependencies") {
     console.log("getDependencies");
-    var ids = process.argv[4].split(",").map(function (id) { return BigInt(id); });
+    var ids = toBigIntIds(normalizeWorkshopIds(process.argv[4], ","));
     var client = steamworks.init(Number(process.argv[2]));
-    getDependencies(client, ids, function (dependenciesMap) {
+    if (ids.length == 0) {
         if (process.send)
-            process.send(dependenciesMap);
+            process.send({});
         setTimeout(function () {
             process.exit();
-        }, 200);
-    });
+        }, 50);
+    }
+    else {
+        getDependencies(client, ids, function (dependenciesMap) {
+            if (process.send)
+                process.send(dependenciesMap);
+            setTimeout(function () {
+                process.exit();
+            }, 200);
+        });
+    }
 }
 var getItems = function (client, ids, cb) {
     if (!process.send) {
@@ -240,70 +305,105 @@ var getItems = function (client, ids, cb) {
     })
         .catch(function (e) {
         fs.appendFileSync("sublog.txt", "ERROR:");
-        fs.appendFileSync("sublog.txt", e.toString());
+        fs.appendFileSync("sublog.txt", String(e));
         process.exit();
     });
 };
 if (process.argv[3] == "getModsData") {
     console.log("getModsData");
-    var ids_2 = process.argv[4].split(",").map(function (id) { return BigInt(id); });
+    var ids_5 = toBigIntIds(normalizeWorkshopIds(process.argv[4], ","));
     var client_3 = steamworks.init(Number(process.argv[2]));
-    getItems(client_3, ids_2, function (data) {
-        getDependencies(client_3, ids_2, function (dependenciesMap) {
-            var dedupedAuthorIds = Array.from(new Set(data.map(function (data) { return data.owner.steamId64; }))).map(function (id) {
-                return BigInt(id);
-            });
-            getAuthors(client_3, dedupedAuthorIds, function (authorsMap) {
-                var modsData = {
-                    mods: data,
-                    dependencies: Object.fromEntries(dependenciesMap),
-                    authors: Object.fromEntries(authorsMap),
-                };
-                if (process.send)
-                    process.send(modsData);
-                setTimeout(function () {
-                    process.exit();
-                }, 200);
+    if (ids_5.length == 0) {
+        if (process.send)
+            process.send({ mods: [], dependencies: {}, authors: {} });
+        setTimeout(function () {
+            process.exit();
+        }, 50);
+    }
+    else {
+        getItems(client_3, ids_5, function (data) {
+            getDependencies(client_3, ids_5, function (dependenciesMap) {
+                var dedupedAuthorIds = Array.from(new Set(data.map(function (data) { return data.owner.steamId64; }))).map(function (id) {
+                    return BigInt(id);
+                });
+                getAuthors(client_3, dedupedAuthorIds, function (authorsMap) {
+                    var modsData = {
+                        mods: data,
+                        dependencies: Object.fromEntries(dependenciesMap),
+                        authors: Object.fromEntries(authorsMap),
+                    };
+                    if (process.send)
+                        process.send(modsData);
+                    setTimeout(function () {
+                        process.exit();
+                    }, 200);
+                });
             });
         });
-    });
+    }
 }
 if (process.argv[3] == "checkState") {
     console.log("checkState");
-    var ids = process.argv[4].split(";"); //"2856936614";
+    var ids = normalizeWorkshopIds(process.argv[4], ";");
     var client_4 = steamworks.init(Number(process.argv[2]));
-    var idsThatNeedUpdates = ids
-        .map(function (id) { return [id, client_4.workshop.state(BigInt(id))]; })
-        .filter(function (num) { return num[1] & 8; })
-        .map(function (num) { return num[0]; });
-    idsThatNeedUpdates.forEach(function (id) { return __awaiter(void 0, void 0, void 0, function () {
-        return __generator(this, function (_a) {
-            switch (_a.label) {
-                case 0:
-                    client_4.workshop.download(BigInt(id), false);
-                    return [4 /*yield*/, new Promise(function (resolve) { return setTimeout(resolve, 100); })];
-                case 1:
-                    _a.sent();
-                    return [2 /*return*/];
-            }
-        });
-    }); });
-    var timeoutValue = (idsThatNeedUpdates.length > 0 && 200) || 0;
-    setTimeout(function () {
-        process.exit();
-    }, timeoutValue);
+    if (ids.length == 0) {
+        setTimeout(function () {
+            process.exit();
+        }, 50);
+    }
+    else {
+        var idsThatNeedUpdates_1 = ids
+            .map(function (id) { return [id, client_4.workshop.state(BigInt(id))]; })
+            .filter(function (num) { return num[1] & 8; })
+            .map(function (num) { return num[0]; });
+        void (function () { return __awaiter(void 0, void 0, void 0, function () {
+            var _i, idsThatNeedUpdates_2, id;
+            return __generator(this, function (_a) {
+                switch (_a.label) {
+                    case 0:
+                        _i = 0, idsThatNeedUpdates_2 = idsThatNeedUpdates_1;
+                        _a.label = 1;
+                    case 1:
+                        if (!(_i < idsThatNeedUpdates_2.length)) return [3 /*break*/, 4];
+                        id = idsThatNeedUpdates_2[_i];
+                        client_4.workshop.download(BigInt(id), false);
+                        return [4 /*yield*/, sleep(steamCommandDelayMs)];
+                    case 2:
+                        _a.sent();
+                        _a.label = 3;
+                    case 3:
+                        _i++;
+                        return [3 /*break*/, 1];
+                    case 4:
+                        setTimeout(function () {
+                            process.exit();
+                        }, idsThatNeedUpdates_1.length > 0 ? 200 : 50);
+                        return [2 /*return*/];
+                }
+            });
+        }); })();
+    }
 }
 if (process.argv[3] == "getItems") {
     console.log("getItems");
-    var ids = process.argv[4].split(",").map(function (id) { return BigInt(id); });
+    var ids = toBigIntIds(normalizeWorkshopIds(process.argv[4], ","));
     var client = steamworks.init(Number(process.argv[2]));
-    getItems(client, ids, function (data) {
+    if (ids.length == 0) {
         if (process.send)
-            process.send(data);
+            process.send([]);
         setTimeout(function () {
             process.exit();
-        }, 200);
-    });
+        }, 50);
+    }
+    else {
+        getItems(client, ids, function (data) {
+            if (process.send)
+                process.send(data);
+            setTimeout(function () {
+                process.exit();
+            }, 200);
+        });
+    }
 }
 if (process.argv[3] == "upload") {
     console.log("upload");
@@ -376,14 +476,52 @@ if (process.argv[3] == "update") {
 }
 if (process.argv[3] == "sub") {
     console.log("SUB");
-    var ids = process.argv[4].split(";"); //"2856936614";
+    var ids_6 = normalizeWorkshopIds(process.argv[4], ";");
     var client_6 = steamworks.init(Number(process.argv[2]));
-    var promises = ids.map(function (id) { return client_6.workshop.subscribe(BigInt(id)); });
-    Promise.allSettled(promises).then(function () {
+    if (ids_6.length == 0) {
         setTimeout(function () {
             if (process.send)
                 process.send("done");
             process.exit();
-        }, 200);
-    });
+        }, 50);
+    }
+    else {
+        void (function () { return __awaiter(void 0, void 0, void 0, function () {
+            var _i, ids_7, id, e_2;
+            return __generator(this, function (_a) {
+                switch (_a.label) {
+                    case 0:
+                        _i = 0, ids_7 = ids_6;
+                        _a.label = 1;
+                    case 1:
+                        if (!(_i < ids_7.length)) return [3 /*break*/, 8];
+                        id = ids_7[_i];
+                        _a.label = 2;
+                    case 2:
+                        _a.trys.push([2, 4, , 5]);
+                        return [4 /*yield*/, client_6.workshop.subscribe(BigInt(id))];
+                    case 3:
+                        _a.sent();
+                        return [3 /*break*/, 5];
+                    case 4:
+                        e_2 = _a.sent();
+                        return [3 /*break*/, 5];
+                    case 5: return [4 /*yield*/, sleep(steamCommandDelayMs)];
+                    case 6:
+                        _a.sent();
+                        _a.label = 7;
+                    case 7:
+                        _i++;
+                        return [3 /*break*/, 1];
+                    case 8:
+                        setTimeout(function () {
+                            if (process.send)
+                                process.send("done");
+                            process.exit();
+                        }, 200);
+                        return [2 /*return*/];
+                }
+            });
+        }); })();
+    }
 }

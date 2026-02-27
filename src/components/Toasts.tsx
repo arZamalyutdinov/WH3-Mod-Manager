@@ -1,4 +1,4 @@
-import { Toast } from "flowbite-react";
+import { Toast, ToastToggle } from "flowbite-react";
 import React, { memo, useCallback, useContext, useEffect, useMemo, useState } from "react";
 import { HiCheck, HiOutlineInformationCircle, HiX } from "react-icons/hi";
 import { useAppDispatch, useAppSelector } from "../hooks";
@@ -102,7 +102,7 @@ export const Toasts = memo(() => {
                 );
               })}
             </div>
-            <Toast.Toggle onClick={() => onToastClicked(toast)} />
+            <ToastToggle onClick={() => onToastClicked(toast)} />
           </Toast>
         ))}
       </div>

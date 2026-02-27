@@ -240,7 +240,7 @@ const PackTablesTableView = memo(() => {
   const [keyFilter, setKeyFIlter] = useState<string>("");
   const [tableFilter, setTableFilter] = useState<string>("");
 
-  const hotRef = useRef<HotTableRef>(null);
+  const hotRef = useRef<HotTableRef>(null!);
 
   const setTableFilterDebounced = useMemo(
     () =>

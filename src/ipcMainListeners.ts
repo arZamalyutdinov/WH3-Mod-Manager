@@ -1,8 +1,8 @@
 import assert from "assert";
 import bs from "binary-search";
 import * as cheerio from "cheerio";
-import { exec, fork } from "child_process";
-import chokidar from "chokidar";
+import { ChildProcess, exec, fork } from "child_process";
+import chokidar, { type FSWatcher } from "chokidar";
 import { format } from "date-fns";
 import { app, BrowserWindow, clipboard, dialog, ipcMain, shell } from "electron";
 import windowStateKeeper from "electron-window-state";
@@ -96,6 +96,10 @@ import { buildCustomizableModsSignature } from "./utility/signatureHelpers";
 import { resolveLocalizedValue } from "./utility/localizationHelpers";
 import steamCollectionScript from "./utility/steamCollectionScript";
 import Trie from "./utility/trie";
+import { registerLifecycleListeners } from "./ipc/listeners/lifecycle";
+import { registerPackListeners } from "./ipc/listeners/packs";
+import { registerSteamListeners } from "./ipc/listeners/steam";
+import { registerViewerListeners } from "./ipc/listeners/viewer";
 import { Md10K } from "react-icons/md";
 import { join } from "path";
 
@@ -105,11 +109,65 @@ declare const VIEWER_PRELOAD_WEBPACK_ENTRY: string;
 declare const SKILLS_WEBPACK_ENTRY: string;
 declare const SKILLS_PRELOAD_WEBPACK_ENTRY: string;
 
-let contentWatcher: chokidar.FSWatcher | undefined;
-let dataWatcher: chokidar.FSWatcher | undefined;
-let downloadsWatcher: chokidar.FSWatcher | undefined;
-let mergedWatcher: chokidar.FSWatcher | undefined;
+let contentWatcher: FSWatcher | undefined;
+let dataWatcher: FSWatcher | undefined;
+let downloadsWatcher: FSWatcher | undefined;
+let mergedWatcher: FSWatcher | undefined;
 let isCompatDataRequestInFlight = false;
+
+type PackReadProgressChannel = "setCurrentlyReadingMod" | "setLastModThatWasRead";
+const queuedPackReadProgress = new Map<PackReadProgressChannel, string>();
+const packReadProgressCoalesceMs = 75;
+let packReadProgressFlushTimeout: NodeJS.Timeout | undefined;
+const queuedPacksDataReadPaths = new Set<string>();
+const packsDataReadCoalesceMs = 100;
+let packsDataReadFlushTimeout: NodeJS.Timeout | undefined;
+
+const flushQueuedPackReadProgress = () => {
+  if (packReadProgressFlushTimeout) {
+    clearTimeout(packReadProgressFlushTimeout);
+    packReadProgressFlushTimeout = undefined;
+  }
+
+  if (queuedPackReadProgress.size == 0) return;
+
+  for (const [channel, modName] of queuedPackReadProgress) {
+    windows.mainWindow?.webContents.send(channel, modName);
+  }
+  queuedPackReadProgress.clear();
+};
+
+const queuePackReadProgress = (channel: PackReadProgressChannel, modName: string) => {
+  queuedPackReadProgress.set(channel, modName);
+  if (packReadProgressFlushTimeout) return;
+
+  packReadProgressFlushTimeout = setTimeout(() => {
+    packReadProgressFlushTimeout = undefined;
+    flushQueuedPackReadProgress();
+  }, packReadProgressCoalesceMs);
+};
+
+const flushQueuedPacksDataRead = () => {
+  if (packsDataReadFlushTimeout) {
+    clearTimeout(packsDataReadFlushTimeout);
+    packsDataReadFlushTimeout = undefined;
+  }
+
+  if (queuedPacksDataReadPaths.size == 0) return;
+
+  windows.mainWindow?.webContents.send("setPacksDataRead", Array.from(queuedPacksDataReadPaths));
+  queuedPacksDataReadPaths.clear();
+};
+
+const queuePacksDataRead = (packPath: string) => {
+  queuedPacksDataReadPaths.add(packPath);
+  if (packsDataReadFlushTimeout) return;
+
+  packsDataReadFlushTimeout = setTimeout(() => {
+    packsDataReadFlushTimeout = undefined;
+    flushQueuedPacksDataRead();
+  }, packsDataReadCoalesceMs);
+};
 
 export const windows = {
   mainWindow: undefined as BrowserWindow | undefined,
@@ -143,7 +201,7 @@ const appendPacksData = (newPack: Pack, mod?: Mod) => {
 
   if (!existingPack) {
     appData.packsData.push(newPack);
-    windows.mainWindow?.webContents.send("setPacksDataRead", [newPack.path]);
+    queuePacksDataRead(newPack.path);
 
     const overwrittenFileNames = newPack.packedFiles
       .map((packedFile) => packedFile.name)
@@ -319,9 +377,9 @@ export const readModsByPath = async (
     }
     // console.log("READING ", modPath, readLocs);
     appData.currentlyReadingModPaths.push(modPath);
-    windows.mainWindow?.webContents.send("setCurrentlyReadingMod", modPath);
+    queuePackReadProgress("setCurrentlyReadingMod", modPath);
     const newPack = await readPack(modPath, packReadingOptions);
-    windows.mainWindow?.webContents.send("setLastModThatWasRead", modPath);
+    queuePackReadProgress("setLastModThatWasRead", modPath);
     appData.currentlyReadingModPaths = appData.currentlyReadingModPaths.filter((path) => path != modPath);
     // if (appData.packsData.every((pack) => pack.path != modPath)) {
     appendPacksData(newPack);
@@ -338,6 +396,9 @@ export const readModsByPath = async (
       packTableCollisions: appData.compatData.packTableCollisions,
     } as PackCollisions);
   }
+
+  flushQueuedPacksDataRead();
+  flushQueuedPackReadProgress();
 
   return newPacks;
 };
@@ -1474,6 +1535,91 @@ export const registerIpcMainListeners = (
     removePackFromCollisions(path);
   };
 
+  let packFsMutationQueue: Promise<void> = Promise.resolve();
+  const enqueuePackFsMutation = (task: () => Promise<void>) => {
+    packFsMutationQueue = packFsMutationQueue
+      .then(task)
+      .catch((error) => {
+        console.error("pack fs mutation task failed:", error);
+      });
+    return packFsMutationQueue;
+  };
+
+  const queueOnNewPackFound = (path: string, fromWatcher = false) => {
+    void enqueuePackFsMutation(async () => {
+      await onNewPackFound(path, fromWatcher);
+    });
+  };
+
+  const queueOnPackDeleted = (path: string, isDeletedFromContent = false) => {
+    void enqueuePackFsMutation(async () => {
+      await onPackDeleted(path, isDeletedFromContent);
+    });
+  };
+
+  const watcherRefreshDebounceMs = 350;
+  const scheduledWatcherRefreshTimers = new Map<string, NodeJS.Timeout>();
+  const scheduledWatcherRefreshMeta = new Map<
+    string,
+    { fromWatcher: boolean; isDeletedFromContent: boolean }
+  >();
+
+  const clearScheduledWatcherRefresh = (path: string) => {
+    const existingTimer = scheduledWatcherRefreshTimers.get(path);
+    if (existingTimer) {
+      clearTimeout(existingTimer);
+      scheduledWatcherRefreshTimers.delete(path);
+    }
+    scheduledWatcherRefreshMeta.delete(path);
+  };
+
+  const clearAllScheduledWatcherRefreshes = () => {
+    for (const timer of scheduledWatcherRefreshTimers.values()) {
+      clearTimeout(timer);
+    }
+    scheduledWatcherRefreshTimers.clear();
+    scheduledWatcherRefreshMeta.clear();
+  };
+
+  const scheduleWatcherRefresh = (
+    path: string,
+    options: { fromWatcher?: boolean; isDeletedFromContent?: boolean } = {},
+  ) => {
+    const nextState = {
+      fromWatcher: options.fromWatcher ?? false,
+      isDeletedFromContent: options.isDeletedFromContent ?? false,
+    };
+    const previousState = scheduledWatcherRefreshMeta.get(path);
+    if (previousState) {
+      scheduledWatcherRefreshMeta.set(path, {
+        fromWatcher: previousState.fromWatcher && nextState.fromWatcher,
+        isDeletedFromContent: previousState.isDeletedFromContent || nextState.isDeletedFromContent,
+      });
+    } else {
+      scheduledWatcherRefreshMeta.set(path, nextState);
+    }
+
+    const existingTimer = scheduledWatcherRefreshTimers.get(path);
+    if (existingTimer) {
+      clearTimeout(existingTimer);
+    }
+
+    scheduledWatcherRefreshTimers.set(
+      path,
+      setTimeout(() => {
+        scheduledWatcherRefreshTimers.delete(path);
+        const pending = scheduledWatcherRefreshMeta.get(path);
+        scheduledWatcherRefreshMeta.delete(path);
+        if (!pending) return;
+
+        void enqueuePackFsMutation(async () => {
+          await onPackDeleted(path, pending.isDeletedFromContent);
+          await onNewPackFound(path, pending.fromWatcher);
+        });
+      }, watcherRefreshDebounceMs),
+    );
+  };
+
   const matchTableNamePart = /^db\\(.*?)\\data__/;
 
   const getAllMods = async () => {
@@ -1614,6 +1760,8 @@ export const registerIpcMainListeners = (
       console.log(err);
     }
 
+    clearAllScheduledWatcherRefreshes();
+
     await contentWatcher?.close();
     contentWatcher = undefined;
     await dataWatcher?.close();
@@ -1642,16 +1790,17 @@ export const registerIpcMainListeners = (
         })
         .on("add", async (path) => {
           console.log("NEW CONTENT ADD", path);
-          onNewPackFound(path);
+          clearScheduledWatcherRefresh(path);
+          queueOnNewPackFound(path);
         })
         .on("unlink", async (path) => {
           console.log("NEW CONTENT UNLINK", path);
-          onPackDeleted(path, true);
+          clearScheduledWatcherRefresh(path);
+          queueOnPackDeleted(path, true);
         })
         .on("change", async (path) => {
           console.log("NEW CONTENT CHANGE", path);
-          onPackDeleted(path);
-          onNewPackFound(path);
+          scheduleWatcherRefresh(path);
         });
     }
     if (!downloadsWatcher) {
@@ -1685,16 +1834,17 @@ export const registerIpcMainListeners = (
         })
         .on("add", async (path) => {
           console.log("dataWatcher add:", path);
-          onNewPackFound(path, true);
+          clearScheduledWatcherRefresh(path);
+          queueOnNewPackFound(path, true);
         })
         .on("unlink", async (path) => {
-          onPackDeleted(path);
+          clearScheduledWatcherRefresh(path);
+          queueOnPackDeleted(path);
         })
         .on("change", async (path) => {
           console.log("data pack changed:", path);
-          onPackDeleted(path);
           console.log("dataWatcher change:", path);
-          onNewPackFound(path);
+          scheduleWatcherRefresh(path);
         });
     }
     if (!mergedWatcher) {
@@ -1720,15 +1870,16 @@ export const registerIpcMainListeners = (
           usePolling: true,
         })
         .on("add", async (path) => {
-          onNewPackFound(path);
+          clearScheduledWatcherRefresh(path);
+          queueOnNewPackFound(path);
         })
         .on("unlink", async (path) => {
-          onPackDeleted(path);
+          clearScheduledWatcherRefresh(path);
+          queueOnPackDeleted(path);
         })
         .on("change", async (path) => {
           console.log("pack changed:", path);
-          onPackDeleted(path);
-          onNewPackFound(path);
+          scheduleWatcherRefresh(path);
         });
     }
   };
@@ -2825,7 +2976,8 @@ export const registerIpcMainListeners = (
 
     // should be tracked automatically by the data watcher, but chokidar can choke on symlinks here
     for (const pathsOfNewSymLink of pathsOfNewSymLinks) {
-      onNewPackFound(pathsOfNewSymLink);
+      clearScheduledWatcherRefresh(pathsOfNewSymLink);
+      queueOnNewPackFound(pathsOfNewSymLink);
     }
     // getAllMods();
   });
@@ -2883,7 +3035,8 @@ export const registerIpcMainListeners = (
 
     // should be tracked automatically by the data watcher, but chokidar can choke on symlinks here
     for (const deletedSymLink of symLinksToDelete) {
-      onPackDeleted(deletedSymLink.path);
+      clearScheduledWatcherRefresh(deletedSymLink.path);
+      queueOnPackDeleted(deletedSymLink.path);
     }
     // getAllMods();
   });
@@ -3527,13 +3680,17 @@ export const registerIpcMainListeners = (
     }
   });
 
-  ipcMain.on("getPackData", async (event, packPath: string, table?: DBTable) => {
+  const onGetPackData = async (event: Electron.IpcMainEvent, packPath: string, table?: DBTable) => {
     getPackData(packPath, table);
-  });
+  };
 
-  ipcMain.on("getPackDataWithLocs", async (event, packPath: string, table?: DBTable) => {
+  const onGetPackDataWithLocs = async (
+    event: Electron.IpcMainEvent,
+    packPath: string,
+    table?: DBTable,
+  ) => {
     getPackData(packPath, table, true);
-  });
+  };
 
   const createViewerWindow = () => {
     if (windows.viewerWindow) return;
@@ -3557,8 +3714,8 @@ export const registerIpcMainListeners = (
         height: 28,
       },
       webPreferences: {
-        nodeIntegration: true,
-        contextIsolation: false,
+        nodeIntegration: false,
+        contextIsolation: true,
         preload: VIEWER_PRELOAD_WEBPACK_ENTRY,
         spellcheck: false,
       },
@@ -3602,8 +3759,8 @@ export const registerIpcMainListeners = (
         height: 28,
       },
       webPreferences: {
-        nodeIntegration: true,
-        contextIsolation: false,
+        nodeIntegration: false,
+        contextIsolation: true,
         preload: SKILLS_PRELOAD_WEBPACK_ENTRY,
         spellcheck: false,
       },
@@ -3625,7 +3782,7 @@ export const registerIpcMainListeners = (
     });
   };
 
-  ipcMain.on("requestOpenModInViewer", (event, modPath: string) => {
+  const onRequestOpenModInViewer = (event: Electron.IpcMainEvent, modPath: string) => {
     for (const vanillaPackData of gameToVanillaPacksData[appData.currentGame]) {
       const baseVanillaPackName = vanillaPackData.name;
       if (modPath == baseVanillaPackName) {
@@ -3644,9 +3801,9 @@ export const registerIpcMainListeners = (
     } else {
       createViewerWindow();
     }
-  });
+  };
 
-  ipcMain.on("requestOpenSkillsWindow", (event, mods: Mod[]) => {
+  const onRequestOpenSkillsWindow = (event: Electron.IpcMainEvent, mods: Mod[]) => {
     console.log("ON requestOpenSkillsWindow");
     appData.enabledMods = mods.filter((mod) => mod.isEnabled);
     getSkillsData(mods.filter((mod) => mod.isEnabled));
@@ -3655,18 +3812,22 @@ export const registerIpcMainListeners = (
     } else {
       createSkillsWindow();
     }
-  });
+  };
 
-  ipcMain.on("requestLanguageChange", async (event, language: string) => {
+  const onRequestLanguageChange = async (event: Electron.IpcMainEvent, language: string) => {
     console.log("requestLanguageChange:", language);
     await i18n.changeLanguage(language);
     appData.currentLanguage = language as SupportedLanguage;
     windows.mainWindow?.webContents.send("setCurrentLanguage", language);
     windows.skillsWindow?.webContents.send("setCurrentLanguage", language);
     windows.viewerWindow?.webContents.send("setCurrentLanguage", language);
-  });
+  };
 
-  ipcMain.on("requestGameChange", async (event, game: SupportedGames, appState: AppState) => {
+  const onRequestGameChange = async (
+    event: Electron.IpcMainEvent,
+    game: SupportedGames,
+    appState: AppState,
+  ) => {
     // console.log("game before change is", appData.currentGame, "to", game);
 
     console.log(`Requesting game change to ${game}`);
@@ -3682,7 +3843,7 @@ export const registerIpcMainListeners = (
       console.log("SENDING setCurrentGame", game);
       mainWindow?.webContents.send("setCurrentGame", game, currentPreset, presets);
     }
-  });
+  };
 
   const terminateCurrentGame = () => {
     const name = gameToProcessName[appData.currentGame];
@@ -3706,9 +3867,9 @@ export const registerIpcMainListeners = (
     }
   };
 
-  ipcMain.on("terminateGame", () => {
+  const onTerminateGame = (event: Electron.IpcMainEvent) => {
     terminateCurrentGame();
-  });
+  };
 
   const dbTableToString = (dbTable: DBTable) => {
     return `db\\${dbTable.dbName}\\${dbTable.dbSubname}`;
@@ -3836,7 +3997,7 @@ export const registerIpcMainListeners = (
       ) {
         console.log("READING " + mod.name);
         appData.currentlyReadingModPaths.push(mod.path);
-        if (!skipParsingTables) mainWindow?.webContents.send("setCurrentlyReadingMod", mod.name);
+        if (!skipParsingTables) queuePackReadProgress("setCurrentlyReadingMod", mod.name);
         const newPack = await readPack(mod.path, {
           skipParsingTables,
           readScripts,
@@ -3844,7 +4005,7 @@ export const registerIpcMainListeners = (
           filesToRead,
           readLocs,
         });
-        if (!skipParsingTables) mainWindow?.webContents.send("setLastModThatWasRead", mod.name);
+        if (!skipParsingTables) queuePackReadProgress("setLastModThatWasRead", mod.name);
         appData.currentlyReadingModPaths = appData.currentlyReadingModPaths.filter(
           (path) => path != mod.path,
         );
@@ -3857,6 +4018,9 @@ export const registerIpcMainListeners = (
       }
     }
 
+    flushQueuedPacksDataRead();
+    flushQueuedPackReadProgress();
+
     if (!skipCollisionCheck) {
       mainWindow?.webContents.send("setPackCollisions", {
         packFileCollisions: appData.compatData.packFileCollisions,
@@ -3866,44 +4030,41 @@ export const registerIpcMainListeners = (
   };
 
   let lastReadModsReceived = [];
-  ipcMain.on(
-    "readMods",
-    async (
-      event,
-      mods: Mod[],
-      skipCollisionCheck = true,
-      canUseCustomizableCache = true,
-      customizableModsHash?: string,
-    ) => {
-      let modsToRead = mods;
-      if (canUseCustomizableCache) {
-        const customizableModsCache = await loadCustomizableModsCache();
-        const customizableModsCachePaths = Object.keys(customizableModsCache);
-        const modsNotInCustomizableCache = mods.filter(
-          (mod) => !customizableModsCachePaths.includes(mod.path),
-        );
-        if (modsNotInCustomizableCache.length == 0) {
-          console.log("Skipping readMods, all are already in the customizable mods cache!");
-          if (customizableModsHash !== buildCustomizableModsSignature(appData.customizableMods)) {
-            console.log("Skipping setCustomizableMods in readMods, hash is the same!");
-            mainWindow?.webContents.send("setCustomizableMods", appData.customizableMods);
-          }
-          return;
+  const onReadMods = async (
+    event: Electron.IpcMainEvent,
+    mods: Mod[],
+    skipCollisionCheck = true,
+    canUseCustomizableCache = true,
+    customizableModsHash?: string,
+  ) => {
+    let modsToRead = mods;
+    if (canUseCustomizableCache) {
+      const customizableModsCache = await loadCustomizableModsCache();
+      const customizableModsCachePaths = Object.keys(customizableModsCache);
+      const modsNotInCustomizableCache = mods.filter(
+        (mod) => !customizableModsCachePaths.includes(mod.path),
+      );
+      if (modsNotInCustomizableCache.length == 0) {
+        console.log("Skipping readMods, all are already in the customizable mods cache!");
+        if (customizableModsHash !== buildCustomizableModsSignature(appData.customizableMods)) {
+          console.log("Skipping setCustomizableMods in readMods, hash is the same!");
+          mainWindow?.webContents.send("setCustomizableMods", appData.customizableMods);
         }
-
-        modsToRead = modsNotInCustomizableCache;
+        return;
       }
 
-      if (lastReadModsReceived.length != mods.length) {
-        console.log(
-          "READ MODS RECEIVED",
-          mods.map((mod) => mod.name),
-        );
-        lastReadModsReceived = [...mods];
-      }
-      readMods(modsToRead, skipCollisionCheck, skipCollisionCheck);
-    },
-  );
+      modsToRead = modsNotInCustomizableCache;
+    }
+
+    if (lastReadModsReceived.length != mods.length) {
+      console.log(
+        "READ MODS RECEIVED",
+        mods.map((mod) => mod.name),
+      );
+      lastReadModsReceived = [...mods];
+    }
+    readMods(modsToRead, skipCollisionCheck, skipCollisionCheck);
+  };
 
   const sendQueuedDataToViewer = async () => {
     if (!appData.isViewerReady) {
@@ -3924,7 +4085,7 @@ export const registerIpcMainListeners = (
     appData.queuedViewerData = [];
   };
 
-  ipcMain.on("viewerIsReady", async () => {
+  const onViewerIsReady = async (event: Electron.IpcMainEvent) => {
     console.log("VIEWER IS NOW READY");
     appData.isViewerReady = true;
 
@@ -3956,7 +4117,7 @@ export const registerIpcMainListeners = (
     if (appData.queuedViewerData.length > 0) {
       sendQueuedDataToViewer();
     }
-  });
+  };
 
   const sendQueuedDataToSkills = async () => {
     if (!appData.queuedSkillsData) {
@@ -3980,7 +4141,7 @@ export const registerIpcMainListeners = (
     appData.queuedSkillsData = undefined;
   };
 
-  ipcMain.on("skillsAreReady", () => {
+  const onSkillsAreReady = (event: Electron.IpcMainEvent) => {
     console.log("SKILLS ARE NOW READY");
     appData.areSkillsReady = true;
 
@@ -4001,26 +4162,26 @@ export const registerIpcMainListeners = (
     if (appData.queuedSkillsData) {
       sendQueuedDataToSkills();
     }
-  });
+  };
 
-  ipcMain.on("openFolderInExplorer", (event, path: string) => {
+  const onOpenFolderInExplorer = (event: Electron.IpcMainEvent, path: string) => {
     shell.showItemInFolder(path);
-  });
+  };
 
   const openInSteam = (url: string) => {
     exec(`start steam://openurl/${url}`);
   };
-  ipcMain.on("openInSteam", (event, url: string) => {
+  const onOpenInSteam = (event: Electron.IpcMainEvent, url: string) => {
     openInSteam(url);
-  });
+  };
 
-  ipcMain.on("openPack", (event, path: string) => {
+  const onOpenPack = (event: Electron.IpcMainEvent, path: string) => {
     shell.openPath(path);
-  });
-  ipcMain.on("putPathInClipboard", (event, path: string) => {
+  };
+  const onPutPathInClipboard = (event: Electron.IpcMainEvent, path: string) => {
     clipboard.writeText(path);
-  });
-  ipcMain.on("copyModToData", (event, path: string) => {
+  };
+  const onCopyModToData = (event: Electron.IpcMainEvent, path: string) => {
     const baseName = nodePath.basename(path);
 
     const dataFolder = appData.gamesToGameFolderPaths[appData.currentGame].dataFolder;
@@ -4028,7 +4189,7 @@ export const registerIpcMainListeners = (
 
     const destPath = nodePath.join(dataFolder, baseName);
     fs.copyFileSync(path, destPath);
-  });
+  };
   const checkIsModThumbnailValid = (modThumbnailPath: string) => {
     if (modThumbnailPath == "" || !fs.existsSync(modThumbnailPath)) {
       mainWindow?.webContents.send("addToast", {
@@ -4048,7 +4209,7 @@ export const registerIpcMainListeners = (
     }
     return true;
   };
-  ipcMain.on("uploadMod", async (event, mod: Mod) => {
+  const onUploadMod = async (event: Electron.IpcMainEvent, mod: Mod) => {
     if (!checkIsModThumbnailValid(mod.imgPath)) return;
 
     const child = fork(
@@ -4086,7 +4247,7 @@ export const registerIpcMainListeners = (
         }
       }
     });
-  });
+  };
   const updateMod = async (
     mod: Mod,
     workshopId: string,
@@ -4177,10 +4338,10 @@ export const registerIpcMainListeners = (
       },
     );
   };
-  ipcMain.on("updateMod", async (event, mod: Mod, contentMod: Mod) => {
+  const onUpdateMod = async (event: Electron.IpcMainEvent, mod: Mod, contentMod: Mod) => {
     updateMod(mod, contentMod.workshopId, contentMod.tags);
-  });
-  ipcMain.on("fakeUpdatePack", async (event, mod: Mod) => {
+  };
+  const onFakeUpdatePack = async (event: Electron.IpcMainEvent, mod: Mod) => {
     try {
       const backupFolderPath = nodePath.join(nodePath.dirname(mod.path), "whmm_backups");
       const backupFilePath = nodePath.join(
@@ -4211,9 +4372,9 @@ export const registerIpcMainListeners = (
     } catch (e) {
       console.log(e);
     }
-  });
+  };
 
-  ipcMain.on("makePackBackup", async (event, mod: Mod) => {
+  const onMakePackBackup = async (event: Electron.IpcMainEvent, mod: Mod) => {
     try {
       const uploadFolderPath = nodePath.join(nodePath.dirname(mod.path), "whmm_backups");
       const backupFilePath = nodePath.join(
@@ -4228,47 +4389,44 @@ export const registerIpcMainListeners = (
     } catch (e) {
       console.log(e);
     }
-  });
-  ipcMain.on(
-    "importSteamCollection",
-    async (
-      event,
-      steamCollectionURL: string,
-      isImmediateImport: boolean,
-      doDisableOtherMods: boolean,
-      isLoadOrdered: boolean,
-      doCreatePreset: boolean,
-      presetName: string,
-      isPresetLoadOrdered: boolean,
-    ) => {
-      try {
-        console.log("getting steamCollectionURL:", steamCollectionURL);
-        const res = await fetch(steamCollectionURL);
-        const cheerioObj = cheerio.load(await res.text());
-        const collectionTitle = cheerioObj(".collectionHeaderContent").find(".workshopItemTitle").text();
-        console.log("collection title:", collectionTitle);
-        const modIds = cheerioObj(".collectionItem")
-          .map((_, elem) => elem.attribs["id"].replace("sharedfile_", ""))
-          .toArray();
-        if (!collectionTitle) return;
-        mainWindow?.webContents.send("importSteamCollectionResponse", {
-          name: collectionTitle,
-          modIds,
-          isImmediateImport,
-          doDisableOtherMods,
-          isLoadOrdered,
-          doCreatePreset,
-          presetName,
-          isPresetLoadOrdered,
-        } as ImportSteamCollection);
+  };
+  const onImportSteamCollection = async (
+    event: Electron.IpcMainEvent,
+    steamCollectionURL: string,
+    isImmediateImport: boolean,
+    doDisableOtherMods: boolean,
+    isLoadOrdered: boolean,
+    doCreatePreset: boolean,
+    presetName: string,
+    isPresetLoadOrdered: boolean,
+  ) => {
+    try {
+      console.log("getting steamCollectionURL:", steamCollectionURL);
+      const res = await fetch(steamCollectionURL);
+      const cheerioObj = cheerio.load(await res.text());
+      const collectionTitle = cheerioObj(".collectionHeaderContent").find(".workshopItemTitle").text();
+      console.log("collection title:", collectionTitle);
+      const modIds = cheerioObj(".collectionItem")
+        .map((_, elem) => elem.attribs["id"].replace("sharedfile_", ""))
+        .toArray();
+      if (!collectionTitle) return;
+      mainWindow?.webContents.send("importSteamCollectionResponse", {
+        name: collectionTitle,
+        modIds,
+        isImmediateImport,
+        doDisableOtherMods,
+        isLoadOrdered,
+        doCreatePreset,
+        presetName,
+        isPresetLoadOrdered,
+      } as ImportSteamCollection);
 
-        console.log(modIds);
-      } catch (e) {
-        console.log(e);
-      }
-    },
-  );
-  ipcMain.on("forceModDownload", async (event, mod: Mod) => {
+      console.log(modIds);
+    } catch (e) {
+      console.log(e);
+    }
+  };
+  const onForceModDownload = async (event: Electron.IpcMainEvent, mod: Mod) => {
     try {
       const uniqueModIds = normalizeWorkshopIds([mod.workshopId]);
       if (uniqueModIds.length === 0) return;
@@ -4287,22 +4445,22 @@ export const registerIpcMainListeners = (
     } catch (e) {
       console.log(e);
     }
-  });
-  ipcMain.on("reMerge", async (event, mod: Mod, modsToMerge: Mod[]) => {
+  };
+  const onReMerge = async (event: Electron.IpcMainEvent, mod: Mod, modsToMerge: Mod[]) => {
     try {
       mergeMods(modsToMerge, mod.path);
     } catch (e) {
       console.log(e);
     }
-  });
-  ipcMain.on("deletePack", async (event, mod: Mod) => {
+  };
+  const onDeletePack = async (event: Electron.IpcMainEvent, mod: Mod) => {
     try {
       await fsExtra.remove(mod.path);
     } catch (e) {
       console.log(e);
     }
-  });
-  ipcMain.on("forceDownloadMods", async (event, modIds: string[]) => {
+  };
+  const onForceDownloadMods = async (event: Electron.IpcMainEvent, modIds: string[]) => {
     try {
       const uniqueModIds = normalizeWorkshopIds(modIds);
       if (uniqueModIds.length === 0) return;
@@ -4321,7 +4479,7 @@ export const registerIpcMainListeners = (
     } catch (e) {
       console.log(e);
     }
-  });
+  };
   const maxResubscribeAttempts = 5;
   const resubscribeToMods = async (modIds: string[], attempt = 1) => {
     const uniqueModIds = normalizeWorkshopIds(modIds);
@@ -4401,14 +4559,14 @@ export const registerIpcMainListeners = (
       console.log(e);
     }
   };
-  ipcMain.on("forceResubscribeMods", async (event, mods: Mod[]) => {
+  const onForceResubscribeMods = async (event: Electron.IpcMainEvent, mods: Mod[]) => {
     console.log(
       "in forceResubscribeMods, mods are:",
       mods.map((mod) => mod.name),
     );
     forceResubscribeMods(mods);
-  });
-  ipcMain.on("unsubscribeToMod", async (event, mod: Mod) => {
+  };
+  const onUnsubscribeToMod = async (event: Electron.IpcMainEvent, mod: Mod) => {
     try {
       const child = fork(
         nodePath.join(__dirname, "sub.js"),
@@ -4430,8 +4588,8 @@ export const registerIpcMainListeners = (
     } catch (e) {
       console.log(e);
     }
-  });
-  ipcMain.on("mergeMods", async (event, mods: Mod[]) => {
+  };
+  const onMergeMods = async (event: Electron.IpcMainEvent, mods: Mod[]) => {
     try {
       mergeMods(mods).then((targetPath) => {
         mainWindow?.webContents.send("createdMergedPack", targetPath);
@@ -4439,7 +4597,7 @@ export const registerIpcMainListeners = (
     } catch (e) {
       console.log(e);
     }
-  });
+  };
 
   const subscribeToMods = async (ids: string[]) => {
     const uniqueIds = normalizeWorkshopIds(ids);
@@ -4470,11 +4628,11 @@ export const registerIpcMainListeners = (
     mainWindow?.webContents.send("subscribedToMods", uniqueIds);
   };
 
-  ipcMain.on("subscribeToMods", async (event, ids: string[]) => {
+  const onSubscribeToMods = async (event: Electron.IpcMainEvent, ids: string[]) => {
     await subscribeToMods(ids);
-  });
+  };
 
-  ipcMain.on("exportModsToClipboard", async (event, mods: Mod[]) => {
+  const onExportModsToClipboard = async (event: Electron.IpcMainEvent, mods: Mod[]) => {
     const sortedMods = sortByNameAndLoadOrder(mods);
     const enabledMods = sortedMods.filter((mod) => mod.isEnabled);
 
@@ -4483,9 +4641,9 @@ export const registerIpcMainListeners = (
       .map((mod) => mod.workshopId + (mod.loadOrder != null ? `;${mod.loadOrder}` : ""))
       .join("|");
     clipboard.writeText(exportedMods);
-  });
+  };
 
-  ipcMain.on("exportModNamesToClipboard", async (event, mods: Mod[]) => {
+  const onExportModNamesToClipboard = async (event: Electron.IpcMainEvent, mods: Mod[]) => {
     const sortedMods = sortByNameAndLoadOrder(mods);
     const enabledMods = sortedMods.filter((mod) => mod.isEnabled);
 
@@ -4494,86 +4652,138 @@ export const registerIpcMainListeners = (
       .map((mod) => mod.humanName)
       .join("\n");
     clipboard.writeText(exportedMods);
-  });
+  };
 
-  ipcMain.on("createSteamCollection", async (event, mods: Mod[]) => {
+  const onCreateSteamCollection = async (event: Electron.IpcMainEvent, mods: Mod[]) => {
     const workshopIDs = mods.map((mod) => mod.workshopId);
     const scriptWithIDs = steamCollectionScript.replace(
       "var workshopIds = []",
       "var workshopIds = [" + workshopIDs.map((wID) => `"${wID}"`).join(",") + "]",
     );
     clipboard.writeText(scriptWithIDs);
-  });
+  };
 
-  const appendToSearchInsidePacks = (
-    mods: Mod[],
-    modsIndex: number,
-    packNamesAll: string[],
+  type PackSearchJob = {
+    requestId: number;
+    searchTerm: string;
+    modPaths: string[];
+  };
+  type PackSearchWorkerRequest = {
+    type: "search";
+    requestId: number;
+    searchTerm: string;
+    modPaths: string[];
+  };
+  type PackSearchWorkerResponse =
+    | {
+        type: "success";
+        requestId: number;
+        results: string[];
+      }
+    | {
+        type: "error";
+        requestId: number;
+        error: string;
+      };
+
+  let latestPackSearchRequestId = 0;
+  let activePackSearchWorker: ChildProcess | undefined;
+  let queuedPackSearchJob: PackSearchJob | undefined;
+
+  const setPackSearchError = (requestId: number, errorMessage: string) => {
+    if (requestId != latestPackSearchRequestId) return;
+    mainWindow?.webContents.send("setPackSearchResults", ["error:", errorMessage]);
+  };
+
+  const cancelPackSearchQueue = () => {
+    queuedPackSearchJob = undefined;
+    if (activePackSearchWorker) {
+      activePackSearchWorker.kill();
+    }
+  };
+
+  const startPackSearchQueue = () => {
+    if (activePackSearchWorker || !queuedPackSearchJob) return;
+
+    const job = queuedPackSearchJob;
+    queuedPackSearchJob = undefined;
+
+    const workerPath = nodePath.join(__dirname, "packSearchWorker.js");
+    const child = fork(workerPath, [], {
+      stdio: ["pipe", "pipe", "pipe", "ipc"],
+    });
+    activePackSearchWorker = child;
+
+    let receivedResponse = false;
+    child.on("message", (message: PackSearchWorkerResponse) => {
+      receivedResponse = true;
+      if (message.type == "success") {
+        if (message.requestId == latestPackSearchRequestId) {
+          mainWindow?.webContents.send("setPackSearchResults", message.results);
+        }
+        return;
+      }
+
+      setPackSearchError(message.requestId, message.error);
+    });
+
+    child.once("error", (error) => {
+      setPackSearchError(job.requestId, error.message);
+    });
+
+    child.once("exit", (code, signal) => {
+      if (activePackSearchWorker == child) {
+        activePackSearchWorker = undefined;
+      }
+
+      const wasCancelled = signal == "SIGTERM" || signal == "SIGKILL";
+      if (!receivedResponse && !wasCancelled && code != 0) {
+        setPackSearchError(job.requestId, `pack search worker failed with code ${code}`);
+      }
+
+      if (queuedPackSearchJob) {
+        startPackSearchQueue();
+      }
+    });
+
+    child.send({
+      type: "search",
+      requestId: job.requestId,
+      searchTerm: job.searchTerm,
+      modPaths: job.modPaths,
+    } as PackSearchWorkerRequest);
+  };
+
+  const onSearchInsidePacks = async (
+    event: Electron.IpcMainEvent,
     searchTerm: string,
+    mods: Mod[],
   ) => {
-    if (mods.length < modsIndex * 10) {
-      console.log("setPackSearchResults", modsIndex);
-      mainWindow?.webContents.send("setPackSearchResults", Array.from(new Set([...packNamesAll])));
+    latestPackSearchRequestId += 1;
+    const requestId = latestPackSearchRequestId;
+    const normalizedSearchTerm = searchTerm.trim();
+    if (normalizedSearchTerm == "") {
+      cancelPackSearchQueue();
+      mainWindow?.webContents.send("setPackSearchResults", []);
       return;
     }
 
-    const slicedMods = mods.slice(modsIndex * 10, modsIndex * 10 + 10);
-    const modsArray = slicedMods.map((mod) => `'${mod.path.replaceAll("'", "''")}'`).join(",");
+    const modPaths = Array.from(new Set(mods.map((mod) => mod.path)));
+    console.log("search inside mods:", normalizedSearchTerm, "num mods:", modPaths.length);
 
-    console.log("modsArray is", modsArray, "i is", modsIndex, searchTerm, "num mods is", slicedMods.length);
+    queuedPackSearchJob = {
+      requestId,
+      searchTerm: normalizedSearchTerm,
+      modPaths,
+    };
 
-    exec(
-      `powershell.exe -Command "$strarry = @(${modsArray}); Select-String -Path $strarry -Pattern '${searchTerm}' | Select-Object -Unique -ExpandProperty Filename"`,
-      (error, stdout, stderr) => {
-        if (error) {
-          console.error(`exec error: ${error}`);
-          mainWindow?.webContents.send("setPackSearchResults", ["error:", error]);
-          return;
-        }
+    if (activePackSearchWorker) {
+      activePackSearchWorker.kill();
+      return;
+    }
 
-        console.log("stdout:", stdout);
-        console.log("stderr:", stderr);
-
-        const packNames = stdout
-          .split("\n")
-          .map((line) => line.split(".pack:")[0])
-          .filter((packName) => packName != "");
-
-        console.log("packNames:", packNames);
-
-        // Then search again for unicode text.
-        exec(
-          `powershell.exe -Command "$strarry = @(${modsArray}); Select-String -Encoding unicode -Path $strarry -Pattern '${searchTerm}' | Select-Object -Unique -ExpandProperty Filename"`,
-          (error, stdout) => {
-            if (error) {
-              console.error(`exec error: ${error}`);
-              mainWindow?.webContents.send("setPackSearchResults", ["error:", error]);
-              return;
-            }
-
-            const packNamesUnicodeSearch = stdout
-              .split("\n")
-              .map((line) => line.split(".pack:")[0])
-              .filter((packName) => packName != "");
-
-            console.log("packNames unicode:", packNames, packNamesUnicodeSearch);
-
-            packNamesAll = packNamesAll.concat(packNames);
-            packNamesAll = packNamesAll.concat(packNamesUnicodeSearch);
-
-            appendToSearchInsidePacks(mods, modsIndex + 1, packNamesAll, searchTerm);
-          },
-        );
-      },
-    );
+    startPackSearchQueue();
   };
-
-  ipcMain.on("searchInsidePacks", async (event, searchTerm: string, mods: Mod[]) => {
-    const packNamesAll = [] as string[];
-
-    console.log("search inside mods:", searchTerm, "num mods:", mods.length);
-    appendToSearchInsidePacks(mods, 0, packNamesAll, searchTerm);
-  });
 
   const readTablesFromMods = async (mods: Mod[], tablesToRead: string[]) => {
     for (const mod of mods) {
@@ -4635,146 +4845,140 @@ export const registerIpcMainListeners = (
     await readTablesFromMods(mods, tablesToRead);
   };
 
-  ipcMain.handle(
-    "executeDBDuplication",
-    async (
-      event,
-      packPath: string,
-      nodesNamesToDuplicate: string[],
-      nodeNameToRef: Record<string, IViewerTreeNodeWithData>,
-      nodeNameToRenameValue: Record<string, string>,
-      defaultNodeNameToRenameValue: Record<string, string>,
-      treeData: IViewerTreeNodeWithData,
-      DBCloneSaveOptions: DBCloneSaveOptions,
-    ) => {
-      const { executeDBDuplication } = await import("./DBClone");
-      await executeDBDuplication(
-        packPath,
-        nodesNamesToDuplicate,
-        nodeNameToRef,
-        nodeNameToRenameValue,
-        defaultNodeNameToRenameValue,
-        treeData,
-        DBCloneSaveOptions,
-      );
-    },
-  );
+  const handleExecuteDBDuplication = async (
+    event: Electron.IpcMainInvokeEvent,
+    packPath: string,
+    nodesNamesToDuplicate: string[],
+    nodeNameToRef: Record<string, IViewerTreeNodeWithData>,
+    nodeNameToRenameValue: Record<string, string>,
+    defaultNodeNameToRenameValue: Record<string, string>,
+    treeData: IViewerTreeNodeWithData,
+    DBCloneSaveOptions: DBCloneSaveOptions,
+  ) => {
+    const { executeDBDuplication } = await import("./DBClone");
+    await executeDBDuplication(
+      packPath,
+      nodesNamesToDuplicate,
+      nodeNameToRef,
+      nodeNameToRenameValue,
+      defaultNodeNameToRenameValue,
+      treeData,
+      DBCloneSaveOptions,
+    );
+  };
 
-  ipcMain.on(
-    "getTableReferences",
-    async (event, packPath: string, tableReferenceRequests: TableReferenceRequest[], withPack: boolean) => {
-      console.log("ON getTableReferences, with pack:", withPack);
-      console.log("to read:", tableReferenceRequests);
+  const onGetTableReferences = async (
+    event: Electron.IpcMainEvent,
+    packPath: string,
+    tableReferenceRequests: TableReferenceRequest[],
+    withPack: boolean,
+  ) => {
+    console.log("ON getTableReferences, with pack:", withPack);
+    console.log("to read:", tableReferenceRequests);
 
-      const newPack = await readPack(packPath, {
-        tablesToRead: tableReferenceRequests.map(
-          (req) => (req.tableName.startsWith("db") && req.tableName) || `db\\${req.tableName}`,
-        ),
-      });
+    const newPack = await readPack(packPath, {
+      tablesToRead: tableReferenceRequests.map(
+        (req) => (req.tableName.startsWith("db") && req.tableName) || `db\\${req.tableName}`,
+      ),
+    });
 
       // console.log(
       //   "after getting refs1",
       //   newPack.packedFiles.filter((packedFile) => packedFile.schemaFields).map((pf) => pf.name)
       // );
 
-      if (!packDataStore[packPath]) {
-        packDataStore[packPath] = newPack;
-      } else {
-        const existingPack = packDataStore[packPath];
-        newPack.packedFiles
-          .filter((packedFile) => packedFile.schemaFields)
-          .forEach((newPackedFile) => {
-            const index = existingPack.packedFiles.findIndex(
-              (existingPackedFile) => existingPackedFile.name == newPackedFile.name,
-            );
-            if (index != -1) {
-              existingPack.packedFiles.splice(index, 1);
-            }
-            existingPack.packedFiles.push(newPackedFile);
-          });
+    if (!packDataStore[packPath]) {
+      packDataStore[packPath] = newPack;
+    } else {
+      const existingPack = packDataStore[packPath];
+      newPack.packedFiles
+        .filter((packedFile) => packedFile.schemaFields)
+        .forEach((newPackedFile) => {
+          const index = existingPack.packedFiles.findIndex(
+            (existingPackedFile) => existingPackedFile.name == newPackedFile.name,
+          );
+          if (index != -1) {
+            existingPack.packedFiles.splice(index, 1);
+          }
+          existingPack.packedFiles.push(newPackedFile);
+        });
 
         // console.log(
         //   "after getting refs2",
         //   newPack.packedFiles.filter((packedFile) => packedFile.schemaFields).map((pf) => pf.name)
         // );
-      }
+    }
 
-      packDataStore[packPath].packedFiles
-        .filter((pF) => pF.schemaFields)
-        .forEach((pF) => {
-          const dbVersion = getDBVersion(pF);
-          if (!dbVersion) {
-            return;
-          }
+    packDataStore[packPath].packedFiles
+      .filter((pF) => pF.schemaFields)
+      .forEach((pF) => {
+        const dbVersion = getDBVersion(pF);
+        if (!dbVersion) {
+          return;
+        }
 
-          if (pF.schemaFields) {
-            pF.schemaFields = amendSchemaField(pF.schemaFields, dbVersion);
-            pF.tableSchema = dbVersion;
-          }
-        });
+        if (pF.schemaFields) {
+          pF.schemaFields = amendSchemaField(pF.schemaFields, dbVersion);
+          pF.tableSchema = dbVersion;
+        }
+      });
 
-      // console.log("packDataStore in INDEX", packDataStore);
-      if (withPack)
-        windows.viewerWindow?.webContents.send(
-          "setPackDataStore",
-          packPath,
-          packDataStore[packPath],
-          tableReferenceRequests,
-        );
-      else {
-        const onlyAskedForPFs = newPack.packedFiles
-          .filter((pF) => pF.schemaFields)
-          .map((pF) => packDataStore[packPath].packedFiles.find((amendedPF) => amendedPF.name == pF.name))
-          .filter((pF) => pF);
-        windows.viewerWindow?.webContents.send(
-          "appendPackDataStore",
-          packPath,
-          onlyAskedForPFs,
-          tableReferenceRequests,
-        );
-      }
-    },
-  );
-
-  ipcMain.handle(
-    "buildDBReferenceTree",
-    async (
-      event,
-      packPath: string,
-      currentDBTableSelection: DBTableSelection,
-      deepCloneTarget: { row: number; col: number },
-      existingRefs: DBCell[],
-      selectedNodesByName: IViewerTreeNodeWithData[],
-      existingTree?: IViewerTreeNodeWithData,
-    ) => {
-      return buildDBReferenceTree(
+    // console.log("packDataStore in INDEX", packDataStore);
+    if (withPack)
+      windows.viewerWindow?.webContents.send(
+        "setPackDataStore",
         packPath,
-        currentDBTableSelection,
-        deepCloneTarget,
-        existingRefs,
-        selectedNodesByName,
-        existingTree,
+        packDataStore[packPath],
+        tableReferenceRequests,
       );
-    },
-  );
+    else {
+      const onlyAskedForPFs = newPack.packedFiles
+        .filter((pF) => pF.schemaFields)
+        .map((pF) => packDataStore[packPath].packedFiles.find((amendedPF) => amendedPF.name == pF.name))
+        .filter((pF) => pF);
+      windows.viewerWindow?.webContents.send(
+        "appendPackDataStore",
+        packPath,
+        onlyAskedForPFs,
+        tableReferenceRequests,
+      );
+    }
+  };
 
-  ipcMain.handle("getDBNameToDBVersions", async (event) => {
+  const handleBuildDBReferenceTree = async (
+    event: Electron.IpcMainInvokeEvent,
+    packPath: string,
+    currentDBTableSelection: DBTableSelection,
+    deepCloneTarget: { row: number; col: number },
+    existingRefs: DBCell[],
+    selectedNodesByName: IViewerTreeNodeWithData[],
+    existingTree?: IViewerTreeNodeWithData,
+  ) => {
+    return buildDBReferenceTree(
+      packPath,
+      currentDBTableSelection,
+      deepCloneTarget,
+      existingRefs,
+      selectedNodesByName,
+      existingTree,
+    );
+  };
+
+  const handleGetDBNameToDBVersions = async (event: Electron.IpcMainInvokeEvent) => {
     return DBNameToDBVersions[appData.currentGame];
-  });
+  };
 
-  ipcMain.handle("getDefaultTableVersions", async (event) => {
+  const handleGetDefaultTableVersions = async (event: Electron.IpcMainInvokeEvent) => {
     return await getDefaultTableVersions();
-  });
+  };
 
-  ipcMain.on(
-    "startGame",
-    async (
-      event,
-      mods: Mod[],
-      areModsPresorted: boolean,
-      startGameOptions: StartGameOptions,
-      saveName?: string,
-    ) => {
+  const onStartGame = async (
+    event: Electron.IpcMainEvent,
+    mods: Mod[],
+    areModsPresorted: boolean,
+    startGameOptions: StartGameOptions,
+    saveName?: string,
+  ) => {
       console.log("before start:");
       for (const pack of appData.packsData) {
         console.log(pack.name, pack.readTables);
@@ -5163,10 +5367,9 @@ export const registerIpcMainListeners = (
       } catch (e) {
         console.log(e);
       }
-    },
-  );
+  };
 
-  ipcMain.handle("selectDirectory", async () => {
+  const handleSelectDirectory = async (event: Electron.IpcMainInvokeEvent) => {
     try {
       const result = await dialog.showOpenDialog(mainWindow || new BrowserWindow(), {
         properties: ["openDirectory"],
@@ -5180,9 +5383,13 @@ export const registerIpcMainListeners = (
       console.error("Error selecting directory:", error);
       return undefined;
     }
-  });
+  };
 
-  ipcMain.handle("createNewPack", async (event, packName: string, packDirectory: string) => {
+  const handleCreateNewPack = async (
+    event: Electron.IpcMainInvokeEvent,
+    packName: string,
+    packDirectory: string,
+  ) => {
     try {
       console.log("createNewPack:", packName, packDirectory);
 
@@ -5210,12 +5417,68 @@ export const registerIpcMainListeners = (
         error: error instanceof Error ? error.message : "Failed to create pack",
       };
     }
-  });
+  };
 
-  ipcMain.on("syncIsFeaturesForModdersEnabled", (event, isFeaturesForModdersEnabled: boolean) => {
+  const onSyncIsFeaturesForModdersEnabled = (
+    event: Electron.IpcMainEvent,
+    isFeaturesForModdersEnabled: boolean,
+  ) => {
     console.log("syncIsFeaturesForModdersEnabled:", isFeaturesForModdersEnabled);
     // Send to viewer window
     windows.viewerWindow?.webContents.send("setIsFeaturesForModdersEnabled", isFeaturesForModdersEnabled);
     windows.skillsWindow?.webContents.send("setIsFeaturesForModdersEnabled", isFeaturesForModdersEnabled);
+  };
+
+  registerViewerListeners({
+    onRequestOpenModInViewer,
+    onRequestOpenSkillsWindow,
+    onViewerIsReady,
+    onSkillsAreReady,
+  });
+
+  registerLifecycleListeners({
+    onRequestLanguageChange,
+    onRequestGameChange,
+    onTerminateGame,
+    onOpenFolderInExplorer,
+    onOpenInSteam,
+    onOpenPack,
+    onPutPathInClipboard,
+    onCopyModToData,
+    onSyncIsFeaturesForModdersEnabled,
+  });
+
+  registerSteamListeners({
+    onUploadMod,
+    onUpdateMod,
+    onFakeUpdatePack,
+    onMakePackBackup,
+    onImportSteamCollection,
+    onForceModDownload,
+    onReMerge,
+    onDeletePack,
+    onForceDownloadMods,
+    onForceResubscribeMods,
+    onUnsubscribeToMod,
+    onMergeMods,
+    onSubscribeToMods,
+    onExportModsToClipboard,
+    onExportModNamesToClipboard,
+    onCreateSteamCollection,
+  });
+
+  registerPackListeners({
+    onGetPackData,
+    onGetPackDataWithLocs,
+    onReadMods,
+    onSearchInsidePacks,
+    onGetTableReferences,
+    onStartGame,
+    handleExecuteDBDuplication,
+    handleBuildDBReferenceTree,
+    handleGetDBNameToDBVersions,
+    handleGetDefaultTableVersions,
+    handleSelectDirectory,
+    handleCreateNewPack,
   });
 };

@@ -1,4 +1,4 @@
-import { ipcRenderer } from "electron";
+import { contextBridge, ipcRenderer } from "electron";
 import { DBFieldName, DBFileName, DBVersion, Pack, PackCollisions, PackedFile } from "./packFileTypes";
 import { GameFolderPaths } from "./appData";
 import { SupportedGames } from "./supportedGames";
@@ -396,5 +396,4 @@ const api = {
 
 export type api = typeof api;
 
-window.api = api;
-// contextBridge.exposeInMainWorld("api", api);
+contextBridge.exposeInMainWorld("api", api);

@@ -1,7 +1,7 @@
 import classNames from "classnames";
 import type { ComponentProps, FC, PropsWithChildren, ReactElement, ReactNode } from "react";
 import React from "react";
-import { Children, cloneElement, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Children, cloneElement, isValidElement, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { HiOutlineChevronLeft, HiOutlineChevronRight } from "react-icons/hi";
 import ScrollContainer from "react-indiana-drag-scroll";
 import { excludeClassName } from "../../helpers/exclude";
@@ -35,11 +35,13 @@ export const Carousel: FC<CarouselProps> = ({
 
   const items = useMemo(
     () =>
-      Children.map(children as ReactElement[], (child: ReactElement) =>
-        cloneElement(child, {
+      Children.toArray(children).map((child) => {
+        if (!isValidElement<{ className?: string }>(child)) return child;
+
+        return cloneElement(child, {
           className: classNames(theme.item.base, child.props.className),
-        })
-      ),
+        });
+      }),
     [children, theme.item.base]
   );
 

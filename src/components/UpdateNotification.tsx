@@ -1,4 +1,4 @@
-import { Button, Toast } from "flowbite-react";
+import { Button, Toast, ToastToggle } from "flowbite-react";
 import React, { memo, useCallback, useContext } from "react";
 import localizationContext from "../localizationContext";
 import { useDispatch } from "react-redux";
@@ -57,7 +57,7 @@ export const UpdateNotification = memo(
               </Button>
             </div>
           </div>
-          <Toast.Toggle />
+          <ToastToggle />
         </div>
       </Toast>
     );

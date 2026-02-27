@@ -37,12 +37,13 @@ const LoadingSpinner = () => (
   </div>
 );
 
-function ErrorFallback({ error }: { error: Error }) {
+function ErrorFallback({ error }: { error: unknown }) {
   const localized = useLocalizations();
+  const errorMessage = error instanceof Error ? error.message : String(error);
   return (
     <div role="alert" className="text-red-600">
       <p>{localized.errorSomethingWentWrong}</p>
-      <pre>{error.message}</pre>
+      <pre>{errorMessage}</pre>
       <p>{localized.errorScreenshotInstructions}</p>
     </div>
   );
