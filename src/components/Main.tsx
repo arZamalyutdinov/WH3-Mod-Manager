@@ -30,7 +30,7 @@ const Main = (props: MainProps) => {
         <NodeEditor currentFile={currentFlowFileSelection} currentPack={currentPack}></NodeEditor>
       )) ||
         (currentTab == "categories" && <Categories></Categories>) || (
-          <div className="mx-auto grid h-full min-h-0 max-w-[110rem] grid-cols-1 grid-rows-[minmax(0,1fr)] gap-4 text-white xl:grid-cols-[minmax(0,1fr)_22rem]">
+          <div className="mx-auto grid h-full min-h-0 max-w-[110rem] grid-cols-1 grid-rows-[minmax(0,1fr)] gap-4 text-white lg:grid-cols-[minmax(0,1fr)_22rem]">
             <div
               ref={props.setScrollElement}
               id="mod-rows-scroll"
@@ -38,7 +38,7 @@ const Main = (props: MainProps) => {
             >
               <ModRows scrollElement={props.scrollElement} />
             </div>
-            <div className="min-w-0 min-h-0 h-full xl:self-start">
+            <div className="min-w-0 min-h-0 h-full lg:self-start">
               <Sidebar />
             </div>
             <ModTagPicker></ModTagPicker>

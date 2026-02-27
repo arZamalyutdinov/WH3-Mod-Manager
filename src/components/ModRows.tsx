@@ -736,7 +736,7 @@ const ModRows = memo((props: ModRowsProps) => {
               {({ height, isScrolling, onChildScroll, scrollTop, registerChild }) => (
                 <AutoSizer disableHeight>
                   {({ width }) => (
-                    <div ref={registerChild}>
+                    <div ref={registerChild} style={{ gridColumn: "1 / -1", minWidth: 0 }}>
                       <List
                         ref={listRef}
                         autoHeight
