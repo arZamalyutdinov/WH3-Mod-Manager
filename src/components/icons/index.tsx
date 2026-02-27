@@ -22,28 +22,6 @@ const IconFallback = ({ size = 16 }: { size?: number }) => (
 
 // Lazy load heavy icon sets (removed unused LazyReactIcon)
 
-type IconModule = Record<string, unknown>;
-
-const iconSetImporters: Record<string, () => Promise<IconModule>> = {
-  ai: () => import("react-icons/ai"),
-  bi: () => import("react-icons/bi"),
-  bs: () => import("react-icons/bs"),
-  fa: () => import("react-icons/fa"),
-  fa6: () => import("react-icons/fa6"),
-  fi: () => import("react-icons/fi"),
-  gi: () => import("react-icons/gi"),
-  go: () => import("react-icons/go"),
-  hi: () => import("react-icons/hi"),
-  io: () => import("react-icons/io"),
-  io5: () => import("react-icons/io5"),
-  lu: () => import("react-icons/lu"),
-  md: () => import("react-icons/md"),
-  pi: () => import("react-icons/pi"),
-  ri: () => import("react-icons/ri"),
-  tb: () => import("react-icons/tb"),
-  ti: () => import("react-icons/ti"),
-};
-
 // Helper component for lazy-loaded icons
 export const LazyIcon = ({
   iconName,
@@ -61,16 +39,10 @@ export const LazyIcon = ({
   React.useEffect(() => {
     const loadIcon = async () => {
       try {
-        const loadIconSet = iconSetImporters[iconSet];
-        if (!loadIconSet) {
-          console.warn(`Unsupported icon set "${iconSet}" for icon "${iconName}"`);
-          return;
-        }
-
-        const iconModule = await loadIconSet();
+        const iconModule = await import(`react-icons/${iconSet}`);
         const Icon = iconModule[iconName];
-        if (typeof Icon === "function") {
-          setIconComponent(() => Icon as React.ComponentType);
+        if (Icon) {
+          setIconComponent(() => Icon);
         }
       } catch (error) {
         console.warn(`Failed to load icon ${iconName} from ${iconSet}:`, error);

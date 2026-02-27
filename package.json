@@ -168,6 +168,7 @@
     "typescript": "^5.9.3",
     "webpack": "^5.105.3",
     "webpack-bundle-analyzer": "^5.2.0",
+    "webpack-dev-server": "^4.15.2",
     "webpack-sources": "^3.3.4"
   },
   "dependencies": {

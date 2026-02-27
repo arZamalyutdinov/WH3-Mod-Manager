@@ -17603,7 +17603,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"webpack-dev-server@npm:^4.0.0":
+"webpack-dev-server@npm:^4.0.0, webpack-dev-server@npm:^4.15.2":
   version: 4.15.2
   resolution: "webpack-dev-server@npm:4.15.2"
   dependencies:
@@ -17933,6 +17933,7 @@ __metadata:
     unzipper: "npm:^0.12.3"
     webpack: "npm:^5.105.3"
     webpack-bundle-analyzer: "npm:^5.2.0"
+    webpack-dev-server: "npm:^4.15.2"
     webpack-sources: "npm:^3.3.4"
     winreg: "npm:^1.2.5"
   languageName: unknown

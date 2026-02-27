@@ -85,7 +85,14 @@ console.log = (...args) => {
 console.log(`isMain: ${isMain}, isViewer: ${isViewer}, isSkills: ${isSkills}`);
 
 window.addEventListener("error", (e) => {
+  const error = e.error instanceof Error ? e.error.stack || e.error.message : `${e.message}`;
+  log.error("Unhandled renderer error:", error);
   console.log(e);
+});
+
+window.addEventListener("unhandledrejection", (e) => {
+  const reason = e.reason instanceof Error ? e.reason.stack || e.reason.message : String(e.reason);
+  log.error("Unhandled renderer rejection:", reason);
 });
 
 window.api?.handleLog((event, msg) => {

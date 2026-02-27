@@ -189,6 +189,35 @@ if (!gotTheLock) {
     // and load the index.html of the app.
     windows.mainWindow.loadURL(MAIN_WINDOW_WEBPACK_ENTRY);
 
+    windows.mainWindow.webContents.on(
+      "did-fail-load",
+      (_event, errorCode, errorDescription, validatedURL, isMainFrame) => {
+        console.error(
+          "mainWindow did-fail-load:",
+          JSON.stringify({ errorCode, errorDescription, validatedURL, isMainFrame })
+        );
+      }
+    );
+
+    windows.mainWindow.webContents.on("render-process-gone", (_event, details) => {
+      console.error("mainWindow render-process-gone:", JSON.stringify(details));
+    });
+
+    windows.mainWindow.webContents.on("preload-error", (_event, preloadPath, error) => {
+      console.error(
+        "mainWindow preload-error:",
+        JSON.stringify({
+          preloadPath,
+          message: error?.message,
+          stack: error?.stack,
+        })
+      );
+    });
+
+    windows.mainWindow.on("unresponsive", () => {
+      console.error("mainWindow became unresponsive");
+    });
+
     windows.mainWindow.webContents.setWindowOpenHandler(({ url }) => {
       shell.openExternal(url);
       return { action: "deny" };
