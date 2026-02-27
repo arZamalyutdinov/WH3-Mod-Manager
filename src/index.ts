@@ -136,6 +136,10 @@ if (!gotTheLock) {
   };
 
   const createWindow = (): void => {
+    console.log(
+      `createWindow: app.isPackaged=${app.isPackaged}, isDev=${isDev}, entry=${MAIN_WINDOW_WEBPACK_ENTRY}`
+    );
+
     i18n.on("loaded", async () => {
       // Get the OS locale and check if it's supported
       const osLocale = app.getLocale();
@@ -185,6 +189,18 @@ if (!gotTheLock) {
     });
 
     mainWindowState.manage(windows.mainWindow);
+
+    windows.mainWindow.webContents.on("console-message", (_event, level, message, line, sourceId) => {
+      console.log(`renderer-console[level=${level}] ${message} (${sourceId}:${line})`);
+    });
+
+    windows.mainWindow.webContents.on("did-start-loading", () => {
+      console.log("mainWindow did-start-loading");
+    });
+
+    windows.mainWindow.webContents.on("did-finish-load", () => {
+      console.log("mainWindow did-finish-load");
+    });
 
     // and load the index.html of the app.
     windows.mainWindow.loadURL(MAIN_WINDOW_WEBPACK_ENTRY);
@@ -591,21 +607,25 @@ if (!gotTheLock) {
   app.on("ready", createWindow);
 
   app.whenReady().then(() => {
-    installExtension(REACT_DEVELOPER_TOOLS, {
-      loadExtensionOptions: {
-        allowFileAccess: true,
-      },
-    })
-      .then((name) => console.log(`Added Extension:  ${name}`))
-      .catch((err) => console.log("An error occurred: ", err));
+    if (isDev && !app.isPackaged) {
+      installExtension(REACT_DEVELOPER_TOOLS, {
+        loadExtensionOptions: {
+          allowFileAccess: true,
+        },
+      })
+        .then((name) => console.log(`Added Extension:  ${name}`))
+        .catch((err) => console.log("An error occurred: ", err));
 
-    installExtension(REDUX_DEVTOOLS, {
-      loadExtensionOptions: {
-        allowFileAccess: true,
-      },
-    })
-      .then((name) => console.log(`Added Extension:  ${name}`))
-      .catch((err) => console.log("An error occurred: ", err));
+      installExtension(REDUX_DEVTOOLS, {
+        loadExtensionOptions: {
+          allowFileAccess: true,
+        },
+      })
+        .then((name) => console.log(`Added Extension:  ${name}`))
+        .catch((err) => console.log("An error occurred: ", err));
+    } else {
+      console.log("Skipping devtools extension install for packaged/non-dev run");
+    }
   });
 
   app.on("before-quit", () => {

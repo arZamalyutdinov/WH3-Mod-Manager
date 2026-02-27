@@ -1,5 +1,4 @@
 import "./index.css";
-import "./app";
 import log from "electron-log/renderer";
 import {
   setMods,
@@ -93,6 +92,25 @@ window.addEventListener("error", (e) => {
 window.addEventListener("unhandledrejection", (e) => {
   const reason = e.reason instanceof Error ? e.reason.stack || e.reason.message : String(e.reason);
   log.error("Unhandled renderer rejection:", reason);
+});
+
+const renderBootstrapError = (title: string, details: string) => {
+  const root = document.getElementById("root");
+  if (!root) return;
+
+  root.innerHTML = `
+    <div style="padding:16px;color:#b91c1c;font-family:monospace;">
+      <h2 style="margin:0 0 8px 0;">${title}</h2>
+      <pre style="white-space:pre-wrap;margin:0;">${details}</pre>
+    </div>
+  `;
+};
+
+void import("./app").catch((error: unknown) => {
+  const errorMessage = error instanceof Error ? error.stack || error.message : String(error);
+  log.error("Failed to bootstrap renderer app:", errorMessage);
+  console.error("Failed to bootstrap renderer app:", error);
+  renderBootstrapError("Renderer bootstrap failed", errorMessage);
 });
 
 window.api?.handleLog((event, msg) => {
