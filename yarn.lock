@@ -3694,7 +3694,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@tailwindcss/postcss@npm:^4.1.17":
+"@tailwindcss/postcss@npm:^4.1.17, @tailwindcss/postcss@npm:^4.2.1":
   version: 4.2.1
   resolution: "@tailwindcss/postcss@npm:4.2.1"
   dependencies:
@@ -17833,6 +17833,7 @@ __metadata:
     "@storybook/react": "npm:^8.6.14"
     "@storybook/react-webpack5": "npm:^8.6.14"
     "@storybook/test": "npm:^8.6.14"
+    "@tailwindcss/postcss": "npm:^4.2.1"
     "@types/binary-file": "npm:^0.2.2"
     "@types/clone-deep": "npm:^4.0.4"
     "@types/fs-extra": "npm:^11.0.4"
