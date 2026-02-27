@@ -188,13 +188,7 @@ const ModRow = memo(
             className={"grid place-items-center h-full " + (areThumbnailsEnabled ? "bigger-checkbox" : "")}
           >
             <input
-              className="h-4 w-4 cursor-pointer accent-blue-600"
-              style={
-                (isAlwaysEnabled && {
-                  color: "#6D28D9",
-                }) ||
-                {}
-              }
+              className={`mod-enabled-checkbox ${isAlwaysEnabled ? "mod-enabled-checkbox-always" : ""}`}
               type="checkbox"
               name={mod.workshopId}
               id={checkboxId}

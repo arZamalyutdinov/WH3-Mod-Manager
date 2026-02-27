@@ -226,6 +226,51 @@ body {
   transform: scale(1);
 }
 
+.mod-enabled-checkbox {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 18px;
+  height: 18px;
+  border-radius: 4px;
+  border: 2px solid #9ca3af;
+  background: #0f172a;
+  cursor: pointer;
+  display: grid;
+  place-content: center;
+  box-shadow: inset 0 1px 1px rgba(255, 255, 255, 0.08);
+}
+
+.mod-enabled-checkbox::after {
+  content: "";
+  width: 9px;
+  height: 5px;
+  border-right: 2px solid #ffffff;
+  border-bottom: 2px solid #ffffff;
+  transform: rotate(45deg) scale(0);
+  transform-origin: center;
+}
+
+.mod-enabled-checkbox:checked {
+  background: #2563eb;
+  border-color: #bfdbfe;
+}
+
+.mod-enabled-checkbox:checked::after {
+  transform: rotate(45deg) scale(1);
+}
+
+.mod-enabled-checkbox:focus-visible {
+  outline: 2px solid #facc15;
+  outline-offset: 2px;
+}
+
+.mod-enabled-checkbox-always {
+  border-color: #c4b5fd;
+  box-shadow:
+    inset 0 1px 1px rgba(255, 255, 255, 0.08),
+    0 0 0 1px rgba(124, 58, 237, 0.55);
+}
+
 .drop-ghost {
   border: 3px dotted #666;
   width: 100%;

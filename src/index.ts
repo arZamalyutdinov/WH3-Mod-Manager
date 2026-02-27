@@ -48,8 +48,14 @@ if (!gotTheLock) {
     console.log("isAdmin:", appData.isAdmin);
   });
 
-  if (process.argv.find((arg) => arg == "-nogpu")) {
-    console.log("DISABLED HARDWARE ACCELERATION");
+  const shouldDisableGpuForPackagedWindows = process.platform === "win32" && app.isPackaged && !isDev;
+  const shouldDisableGpuFromArgs = process.argv.find((arg) => arg == "-nogpu");
+  if (shouldDisableGpuForPackagedWindows || shouldDisableGpuFromArgs) {
+    if (shouldDisableGpuForPackagedWindows) {
+      console.log("DISABLED HARDWARE ACCELERATION for packaged Windows build");
+    } else {
+      console.log("DISABLED HARDWARE ACCELERATION via -nogpu");
+    }
     app.disableHardwareAcceleration();
   }
 
