@@ -25,14 +25,14 @@ import { useLocalizations } from "../localizationContext";
 import { vanillaPackNames } from "../supportedGames";
 import { IoPeople } from "react-icons/io5";
 import { BsPersonVcard } from "react-icons/bs";
-import { LuPaintbrush2 } from "react-icons/lu";
+import { LuPaintbrush } from "react-icons/lu";
 
 const baseNameOfFile = /.*\\/;
 const matchTablePartOfFileName = /.*?\\(.*?)\\.*?/;
 
 const fileNameToIcon = (packFileName: string) => {
   if (packFileName.endsWith(".wsmodel")) return <IoPeople className="h-5 w-5 self-center ml-2" />;
-  if (packFileName.endsWith(".xml.material")) return <LuPaintbrush2 className="h-5 w-5 self-center ml-2" />;
+  if (packFileName.endsWith(".xml.material")) return <LuPaintbrush className="h-5 w-5 self-center ml-2" />;
   if (packFileName.endsWith(".variantmeshdefinition"))
     return <BsPersonVcard className="h-5 w-5 self-center ml-2" />;
 };
@@ -1344,7 +1344,7 @@ const CompatScreen = memo(() => {
                     <IoPeople className="h-5 w-5 self-center ml-2" /> - wsmodel
                   </div>
                   <div className="flex gap-[1ch]">
-                    <LuPaintbrush2 className="h-5 w-5 self-center ml-2" /> - xml.material
+                    <LuPaintbrush className="h-5 w-5 self-center ml-2" /> - xml.material
                   </div>
                   <div className="flex gap-[1ch]">
                     <BsPersonVcard className="h-5 w-5 self-center ml-2" /> - variantmeshdefinition

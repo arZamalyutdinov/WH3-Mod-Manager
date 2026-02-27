@@ -736,7 +736,6 @@ const ModRows = memo((props: ModRowsProps) => {
               {({ height, isScrolling, onChildScroll, scrollTop, registerChild }) => (
                 <AutoSizer disableHeight>
                   {({ width }) => (
-                    // @ts-expect-error react-virtualized is outdated and registerChild complains about wrong type
                     <div ref={registerChild}>
                       <List
                         ref={listRef}

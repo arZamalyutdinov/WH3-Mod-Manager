@@ -6,7 +6,8 @@ const isValidRepositorySlug = (repository: string) => {
 };
 
 export const getReleaseRepository = () => {
-  const configuredRepository = process.env.WH3MM_RELEASE_REPOSITORY?.trim();
+  const configuredRepository =
+    typeof process !== "undefined" ? process.env.WH3MM_RELEASE_REPOSITORY?.trim() : undefined;
   if (!configuredRepository) return DEFAULT_RELEASE_REPOSITORY;
 
   return isValidRepositorySlug(configuredRepository) ? configuredRepository : DEFAULT_RELEASE_REPOSITORY;
