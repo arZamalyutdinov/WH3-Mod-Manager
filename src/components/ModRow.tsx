@@ -123,6 +123,11 @@ const ModRow = memo(
 
     const decodedHumanName = useMemo(() => decodeHTML(decodeHTML(mod.humanName) ?? ""), [mod.humanName]);
     const decodedAuthorName = useMemo(() => decodeHTML(decodeHTML(mod.author) ?? ""), [mod.author]);
+    const checkboxId = useMemo(() => {
+      const rawId = mod.workshopId?.trim() || mod.path || mod.name;
+      const normalizedId = rawId.replace(/[^A-Za-z0-9_:-]/g, "_");
+      return `${normalizedId}_enabled`;
+    }, [mod.name, mod.path, mod.workshopId]);
 
     return (
       <div
@@ -183,6 +188,7 @@ const ModRow = memo(
             className={"grid place-items-center h-full " + (areThumbnailsEnabled ? "bigger-checkbox" : "")}
           >
             <input
+              className="h-4 w-4 cursor-pointer accent-blue-600"
               style={
                 (isAlwaysEnabled && {
                   color: "#6D28D9",
@@ -191,7 +197,7 @@ const ModRow = memo(
               }
               type="checkbox"
               name={mod.workshopId}
-              id={mod.workshopId + "enabled"}
+              id={checkboxId}
               checked={mod.isEnabled}
               onChange={() => onModToggled(mod)}
             ></input>
@@ -201,7 +207,7 @@ const ModRow = memo(
           onContextMenu={(e) => onModRightClick(e, mod)}
           className={"flex place-items-center grid-area-autohide " + (areThumbnailsEnabled ? "" : "hidden")}
         >
-          <label className="cursor-pointer" htmlFor={mod.workshopId + "enabled"}>
+          <label className="cursor-pointer" htmlFor={checkboxId}>
             {areThumbnailsEnabled && (
               <img
                 className="max-w-[6rem] aspect-square"
@@ -211,10 +217,7 @@ const ModRow = memo(
           </label>
         </div>
         <div className="flex place-items-center w-min-[0px]" onContextMenu={(e) => onModRightClick(e, mod)}>
-          <label
-            className="max-w-full inline-block break-words cursor-pointer"
-            htmlFor={mod.workshopId + "enabled"}
-          >
+          <label className="max-w-full inline-block break-words cursor-pointer" htmlFor={checkboxId}>
             <span
               className={classNames("break-all", "flex", "items-center", {
                 ["text-orange-500"]: mod.isInData && !mod.isSymbolicLink,

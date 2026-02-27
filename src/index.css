@@ -283,8 +283,6 @@ body:not(.disable-row-hover) .row-hover-highlight:hover > div:not(.drop-ghost) {
 
 #mod-rows-scroll {
   overscroll-behavior: contain;
-  will-change: scroll-position;
-  transform: translateZ(0);
 }
 
 #top-bar {
@@ -419,7 +417,7 @@ body:not(.disable-row-hover) .row-hover-highlight:hover > div:not(.drop-ghost) {
   border-top: 1px solid rgba(148, 163, 184, 0.35);
 }
 
-@media (max-width: 1279px) {
+@media (max-width: 767px) {
   .sidebar-shell {
     position: relative;
     top: 0;
