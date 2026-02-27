@@ -89,7 +89,7 @@ const App = React.memo(() => {
         {(window.location.pathname.includes("/main_window") && (
           <div className="mx-auto h-[calc(100vh-28px)] px-2 pb-3 pt-3 md:px-4">
             <Onboarding></Onboarding>
-            <div className="mx-auto grid h-full min-h-0 max-w-[124rem] grid-cols-1 grid-rows-[minmax(0,1fr)] gap-4 lg:grid-cols-[15rem_minmax(0,1fr)]">
+            <div className="mx-auto grid h-full min-h-0 max-w-[124rem] grid-cols-1 grid-rows-[minmax(0,1fr)] gap-4 lg:grid-cols-[clamp(9.5rem,14vw,15rem)_minmax(0,1fr)]">
               <div className="min-w-0 lg:self-start">
                 <LeftSidebar />
               </div>

@@ -33,7 +33,7 @@ import localizationContext from "../localizationContext";
 import { GoGear } from "react-icons/go";
 import ModCustomization from "./ModCustomization";
 import UserFlowOptionsModal from "./UserFlowOptionsModal";
-import { WindowScroller, AutoSizer, List, CellMeasurerCache, CellMeasurer } from "react-virtualized";
+import { List, CellMeasurerCache, CellMeasurer } from "react-virtualized";
 import { MeasuredCellParent } from "react-virtualized/dist/es/CellMeasurer";
 import { GridCoreProps } from "react-virtualized/dist/es/Grid";
 import { buildCustomizableModsSignature } from "../utility/signatureHelpers";
@@ -62,6 +62,8 @@ const ModRows = memo((props: ModRowsProps) => {
   const [isDropdownOpen, setIsDropdownOpen] = useState<boolean>(false);
   const [isFlowOptionsModalOpen, setIsFlowOptionsModalOpen] = useState<boolean>(false);
   const [flowOptionsModSelected, setFlowOptionsModSelected] = useState<Mod | undefined>();
+  const [modsListWidth, setModsListWidth] = useState<number>(0);
+  const [modsListHeight, setModsListHeight] = useState<number>(0);
   // const [modBeingCustomized, setModBeingCustomized] = useState<Mod>();
   const [contextMenuMod, setContextMenuMod] = useState<Mod>();
   const [dropdownReferenceElement, setDropdownReferenceElement] = useState<HTMLDivElement>();
@@ -476,6 +478,29 @@ const ModRows = memo((props: ModRowsProps) => {
   }, [visibleMods]);
 
   useEffect(() => {
+    const scrollElement = props.scrollElement;
+    if (!scrollElement) return;
+
+    const updateSize = () => {
+      const width = Math.max(0, scrollElement.clientWidth);
+      const height = Math.max(0, scrollElement.clientHeight);
+      setModsListWidth((prev) => (prev === width ? prev : width));
+      setModsListHeight((prev) => (prev === height ? prev : height));
+    };
+
+    updateSize();
+
+    const resizeObserver = new ResizeObserver(updateSize);
+    resizeObserver.observe(scrollElement);
+    window.addEventListener("resize", updateSize);
+
+    return () => {
+      resizeObserver.disconnect();
+      window.removeEventListener("resize", updateSize);
+    };
+  }, [props.scrollElement]);
+
+  useEffect(() => {
     return () => {
       if (dragScrollRafRef.current != null) {
         cancelAnimationFrame(dragScrollRafRef.current);
@@ -567,6 +592,9 @@ const ModRows = memo((props: ModRowsProps) => {
       cache
     ]
   );
+
+  const virtualizedListWidth = modsListWidth > 0 ? modsListWidth : 800;
+  const virtualizedListHeight = Math.max(240, modsListHeight - 42);
 
   return (
     <>
@@ -731,37 +759,27 @@ const ModRows = memo((props: ModRowsProps) => {
             </span>
           </div>
 
-          {currentTab == "mods" && props.scrollElement && (
-            <WindowScroller scrollElement={props.scrollElement}>
-              {({ height, isScrolling, onChildScroll, scrollTop, registerChild }) => (
-                <AutoSizer disableHeight>
-                  {({ width }) => (
-                    <div ref={registerChild} style={{ gridColumn: "1 / -1", minWidth: 0 }}>
-                      <List
-                        ref={listRef}
-                        autoHeight
-                        height={height || 500}
-                        width={width}
-                        scrollTop={scrollTop}
-                        isScrolling={isScrolling}
-                        onScroll={onChildScroll}
-                        // rowHeight={areThumbnailsEnabled ? 112 - 8 : 32}
-                        rowHeight={({ index }: { index: number }) =>
-                          areThumbnailsEnabled
-                            ? Math.max(112 - 8, cache.rowHeight({ index }))
-                            : cache.rowHeight({ index })
-                        }
-                        rowRenderer={Row}
-                        estimatedRowSize={areThumbnailsEnabled ? 104 : 32}
-                        rowCount={visibleMods.length}
-                        overscanRowCount={areThumbnailsEnabled ? 4 : 8}
-                        deferredMeasurementCache={cache}
-                      />
-                    </div>
-                  )}
-                </AutoSizer>
-              )}
-            </WindowScroller>
+          {currentTab == "mods" && (
+            <div style={{ gridColumn: "1 / -1", minWidth: 0, width: "100%" }}>
+              <List
+                ref={listRef}
+                autoHeight={false}
+                height={virtualizedListHeight}
+                width={virtualizedListWidth}
+                // rowHeight={areThumbnailsEnabled ? 112 - 8 : 32}
+                rowHeight={({ index }: { index: number }) =>
+                  areThumbnailsEnabled
+                    ? Math.max(112 - 8, cache.rowHeight({ index }))
+                    : cache.rowHeight({ index })
+                }
+                rowRenderer={Row}
+                estimatedRowSize={areThumbnailsEnabled ? 104 : 32}
+                rowCount={visibleMods.length}
+                overscanRowCount={areThumbnailsEnabled ? 4 : 8}
+                deferredMeasurementCache={cache}
+                style={{ overflowX: "hidden" }}
+              />
+            </div>
           )}
           {currentTab == "enabledMods" &&
             visibleMods.map((mod, i) => (

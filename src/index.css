@@ -393,9 +393,12 @@ body:not(.disable-row-hover) .row-hover-highlight:hover > div:not(.drop-ghost) {
   position: sticky;
   top: 0;
   z-index: 40;
+  width: 100%;
+  min-width: 0;
   height: calc(100vh - 3.5rem);
   max-height: calc(100vh - 3.5rem);
   overflow-y: auto;
+  overflow-x: hidden;
   display: flex;
   flex-direction: column;
   scrollbar-gutter: stable;
