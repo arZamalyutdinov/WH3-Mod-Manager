@@ -1,14 +1,13 @@
 import { faCamera, faEraser, faFileArchive, faGrip } from "@fortawesome/free-solid-svg-icons";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import React, { CSSProperties, memo, useCallback, useContext, useMemo } from "react";
-import { useAppSelector } from "../hooks";
 import { Tooltip } from "flowbite-react";
 import classNames from "classnames";
 import { formatDistanceToNow } from "date-fns";
 import { isSubbedTimeSort, SortingType } from "../utility/modRowSorting";
 import localizationContext from "../localizationContext";
 import { Icons } from "./icons";
-import { CellMeasurerChildProps } from "react-virtualized/dist/es/CellMeasurer";
+import { getModCheckboxId, isModEffectivelyEnabled } from "../utility/modRowHelpers";
 
 const FontAwesomeIconMemo = memo(FontAwesomeIcon);
 
@@ -35,9 +34,14 @@ type ModRowProps = {
   sortingType: SortingType;
   currentTab: MainWindowTab;
   isLast: boolean;
-  style: CSSProperties;
+  style?: CSSProperties;
   gridClass: string;
-  registerChild: CellMeasurerChildProps["registerChild"];
+  areThumbnailsEnabled: boolean;
+  isDev: boolean;
+  isAuthorEnabled: boolean;
+  hasDbCustomizations: boolean;
+  hasFlowOptions: boolean;
+  hasPackDataOverwrite: boolean;
 };
 
 const domParser = new DOMParser();
@@ -80,14 +84,13 @@ const ModRow = memo(
     onCustomizeModRightClick,
     onFlowOptionsClicked,
     gridClass,
-    registerChild,
+    areThumbnailsEnabled,
+    isDev,
+    isAuthorEnabled,
+    hasDbCustomizations,
+    hasFlowOptions,
+    hasPackDataOverwrite,
   }: ModRowProps) => {
-    const areThumbnailsEnabled = useAppSelector((state) => state.app.areThumbnailsEnabled);
-    const isDev = useAppSelector((state) => state.app.isDev);
-    const isAuthorEnabled = useAppSelector((state) => state.app.isAuthorEnabled);
-    const customizableMods = useAppSelector((state) => state.app.customizableMods);
-    const packDataOverwrites = useAppSelector((state) => state.app.packDataOverwrites);
-
     const getGhostClass = useCallback(() => {
       if (isAuthorEnabled && areThumbnailsEnabled) return "grid-column-8";
       if (isAuthorEnabled) return "grid-column-7";
@@ -123,16 +126,14 @@ const ModRow = memo(
 
     const decodedHumanName = useMemo(() => decodeHTML(decodeHTML(mod.humanName) ?? ""), [mod.humanName]);
     const decodedAuthorName = useMemo(() => decodeHTML(decodeHTML(mod.author) ?? ""), [mod.author]);
-    const checkboxId = useMemo(() => {
-      const rawId = mod.workshopId?.trim() || mod.path || mod.name;
-      const normalizedId = rawId.replace(/[^A-Za-z0-9_:-]/g, "_");
-      return `${normalizedId}_enabled`;
-    }, [mod.name, mod.path, mod.workshopId]);
+    const checkboxId = getModCheckboxId(mod);
+    const checkboxChecked = isModEffectivelyEnabled(mod, isAlwaysEnabled);
 
     return (
       <div
-        className={`relative grid row-div-paddings row-hover-highlight ${gridClass}`}
-        key={mod.name}
+        className={`relative grid mod-row row-div-paddings row-hover-highlight ${gridClass} ${
+          areThumbnailsEnabled ? "mod-row-thumbs" : "mod-row-compact"
+        }`}
         onMouseEnter={(e) => onRowHoverStart(e)}
         onMouseLeave={(e) => onRowHoverEnd(e)}
         onDrop={(e) => onDrop(e)}
@@ -143,7 +144,6 @@ const ModRow = memo(
         id={mod.name}
         data-load-order={mod.loadOrder}
         style={style}
-        ref={registerChild}
       >
         <div onDrop={(e) => onDrop(e)} className={"drop-ghost h-10 hidden " + getGhostClass()}></div>
         <div className="flex justify-center items-center" onContextMenu={() => onRemoveModOrder(mod)}>
@@ -192,7 +192,7 @@ const ModRow = memo(
               type="checkbox"
               name={mod.workshopId}
               id={checkboxId}
-              checked={mod.isEnabled}
+              checked={checkboxChecked}
               onChange={() => onModToggled(mod)}
             ></input>
           </form>
@@ -315,25 +315,23 @@ const ModRow = memo(
           </label>
         </div>
         <div className="flex place-items-center justify-center gap-2">
-          {customizableMods[mod.path] &&
-            customizableMods[mod.path].some((file) => file.startsWith("db\\")) && (
+          {hasDbCustomizations && (
               <Icons.Gear
                 onClick={(e) => {
                   onCustomizeModClicked(e, mod);
                 }}
                 onContextMenu={(e) => onCustomizeModRightClick(e, mod)}
                 className="bigger-gear-icon cursor-pointer transition-all duration-200 hover:opacity-70 hover:scale-110"
-                color={(packDataOverwrites[mod.path] && "#1c64f2") || "white"}
+                color={(hasPackDataOverwrite && "#1c64f2") || "white"}
               />
             )}
-          {customizableMods[mod.path] &&
-            customizableMods[mod.path].some((file) => file.startsWith("whmmflows\\")) && (
+          {hasFlowOptions && (
               <Icons.SettingsKnobs
                 onClick={(e) => {
                   onFlowOptionsClicked(e, mod);
                 }}
                 className="bigger-gear-icon cursor-pointer transition-all duration-200 hover:opacity-70 hover:scale-110"
-                color={(packDataOverwrites[mod.path] && "#1c64f2") || "white"}
+                color={(hasPackDataOverwrite && "#1c64f2") || "white"}
               />
             )}
         </div>

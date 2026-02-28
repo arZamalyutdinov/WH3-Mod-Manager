@@ -39,6 +39,7 @@ const ModRows = memo(() => {
   const currentTab = useAppSelector((state) => state.app.currentTab);
   const sortingType = useAppSelector((state) => state.app.modRowsSortingType);
   const customizableMods = useAppSelector((state) => state.app.customizableMods);
+  const packDataOverwrites = useAppSelector((state) => state.app.packDataOverwrites);
   const modBeingCustomized = useAppSelector((state) => state.app.modBeingCustomized);
   const isDev = useAppSelector((state) => state.app.isDev);
   const currentPresetMods = useAppSelector((state) => state.app.currentPreset.mods);
@@ -348,7 +349,6 @@ const ModRows = memo(() => {
 
   const onCustomizeModClicked = useCallback((e: React.MouseEvent<HTMLOrSVGElement, MouseEvent>, mod: Mod) => {
     if (isDropdownOpen) return;
-    console.log("onCustomizeModClicked:", mod);
     dispatch(setModBeingCustomized(mod));
     // setModBeingCustomized(mod);
 
@@ -358,7 +358,6 @@ const ModRows = memo(() => {
 
   const onFlowOptionsClicked = useCallback((e: React.MouseEvent<HTMLOrSVGElement, MouseEvent>, mod: Mod) => {
     if (isDropdownOpen) return;
-    console.log("onFlowOptionsClicked:", mod);
     setFlowOptionsModSelected(mod);
     setIsFlowOptionsModalOpen(true);
 
@@ -369,7 +368,6 @@ const ModRows = memo(() => {
   const onCustomizeModRightClick = useCallback(
     (e: React.MouseEvent<HTMLOrSVGElement, MouseEvent>, mod: Mod) => {
       if (isDropdownOpen) return;
-      console.log("onCustomizeModRightClick:", mod);
       dispatch(removeAllPackDataOverwrites(mod.path));
       // setModBeingCustomized(mod);
 
@@ -411,7 +409,6 @@ const ModRows = memo(() => {
       "faction_agent_permitted_subtypes_tables",
       "campaign_group_unique_agents_tables",
     ];
-    console.log("window.api?.getCustomizableMods from modsrows");
     window.api?.getCustomizableMods(enabledModPaths, customizableTables, customizableModsSignature);
   }, [enabledModPaths, customizableModsSignature]);
 
@@ -441,6 +438,7 @@ const ModRows = memo(() => {
   const onDropMemoized = useMemo(() => onDropWithVisibleMods(), [onDropWithVisibleMods]);
   // eslint-disable-next-line @typescript-eslint/no-empty-function
   const emptyFunc = useCallback(() => {}, []);
+  const gridClass = getGridClass();
 
   useEffect(() => {
     return () => {
@@ -486,7 +484,8 @@ const ModRows = memo(() => {
           />
         )}
 
-        <div className={"grid pt-1.5 parent " + getGridClass()} id="modsGrid">
+        <div className="pt-1.5" id="modsGrid">
+          <div className={"grid " + gridClass} id="modsGridHeader">
           <div
             id="sortHeader"
             className="flex place-items-center w-full justify-center z-[11] mod-row-header rounded-tl-xl"
@@ -615,73 +614,51 @@ const ModRows = memo(() => {
               <GoGear></GoGear>
             </span>
           </div>
+          </div>
+          <div id="modsGridBody">
+            {visibleMods.map((mod, i) => {
+              const customizableFiles = customizableMods[mod.path] ?? [];
+              const hasDbCustomizations = customizableFiles.some((file) => file.startsWith("db\\"));
+              const hasFlowOptions = customizableFiles.some((file) => file.startsWith("whmmflows\\"));
 
-          {currentTab == "mods" &&
-            visibleMods.map((mod, i) => (
-              <ModRow
-                key={mod.path}
-                {...{
-                  index: i,
-                  mod,
-                  onRowHoverStart,
-                  onRowHoverEnd,
-                  onDrop: isCurrentTabEnabledMods ? onDropMemoized : emptyFunc,
-                  onDrag,
-                  onDragStart,
-                  onDragLeave,
-                  onDragEnter,
-                  onDragOver,
-                  onDragEnd,
-                  onModToggled,
-                  onModRightClick,
-                  onCustomizeModClicked,
-                  onCustomizeModRightClick,
-                  onFlowOptionsClicked,
-                  onRemoveModOrder,
-                  sortingType,
-                  currentTab,
-                  isLast: visibleMods.length == i + 1,
-                  isAlwaysEnabled: alwaysEnabledModNames.has(mod.name),
-                  isEnabledInMergedMod: mergedModPaths.has(mod.path),
-                  style: {},
-                  gridClass: "row",
-                  registerChild: emptyFunc,
-                }}
-              ></ModRow>
-            ))}
-          {currentTab == "enabledMods" &&
-            visibleMods.map((mod, i) => (
-              <ModRow
-                key={mod.path}
-                {...{
-                  index: i,
-                  mod,
-                  onRowHoverStart,
-                  onRowHoverEnd,
-                  onDrop: isCurrentTabEnabledMods ? onDropMemoized : emptyFunc,
-                  onDrag,
-                  onDragStart,
-                  onDragLeave,
-                  onDragEnter,
-                  onDragOver,
-                  onDragEnd,
-                  onModToggled,
-                  onModRightClick,
-                  onCustomizeModClicked,
-                  onCustomizeModRightClick,
-                  onFlowOptionsClicked,
-                  onRemoveModOrder,
-                  sortingType,
-                  currentTab,
-                  isLast: visibleMods.length == i + 1,
-                  isAlwaysEnabled: alwaysEnabledModNames.has(mod.name),
-                  isEnabledInMergedMod: mergedModPaths.has(mod.path),
-                  style: {},
-                  gridClass: "row",
-                  registerChild: emptyFunc,
-                }}
-              ></ModRow>
-            ))}
+              return (
+                <ModRow
+                  key={mod.path}
+                  {...{
+                    index: i,
+                    mod,
+                    onRowHoverStart,
+                    onRowHoverEnd,
+                    onDrop: isCurrentTabEnabledMods ? onDropMemoized : emptyFunc,
+                    onDrag,
+                    onDragStart,
+                    onDragLeave,
+                    onDragEnter,
+                    onDragOver,
+                    onDragEnd,
+                    onModToggled,
+                    onModRightClick,
+                    onCustomizeModClicked,
+                    onCustomizeModRightClick,
+                    onFlowOptionsClicked,
+                    onRemoveModOrder,
+                    sortingType,
+                    currentTab,
+                    isLast: visibleMods.length == i + 1,
+                    isAlwaysEnabled: alwaysEnabledModNames.has(mod.name),
+                    isEnabledInMergedMod: mergedModPaths.has(mod.path),
+                    gridClass,
+                    areThumbnailsEnabled,
+                    isDev,
+                    isAuthorEnabled,
+                    hasDbCustomizations,
+                    hasFlowOptions,
+                    hasPackDataOverwrite: Boolean(packDataOverwrites[mod.path]),
+                  }}
+                ></ModRow>
+              );
+            })}
+          </div>
         </div>
       </div>
     </>
