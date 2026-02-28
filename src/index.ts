@@ -40,6 +40,12 @@ if (!gotTheLock) {
 } else {
   app.commandLine.appendSwitch("js-flags", "--max-old-space-size=12288");
 
+  if (process.platform === "win32" && app.isPackaged && !isDev) {
+    // Prefer grayscale text rasterization in packaged Windows builds to avoid LCD subpixel artifacts.
+    app.commandLine.appendSwitch("disable-font-subpixel-positioning");
+    app.commandLine.appendSwitch("disable-lcd-text");
+  }
+
   console.log("ARGVS:", process.argv);
   appData.startArgs = process.argv.slice(1);
 

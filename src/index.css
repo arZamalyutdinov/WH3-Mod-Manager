@@ -326,6 +326,12 @@ body:not(.disable-row-hover) .row-hover-highlight:hover > div:not(.drop-ghost) {
   z-index: 11;
 }
 
+#modsGrid,
+#modsGrid * {
+  text-shadow: none !important;
+  font-family: "Segoe UI", Tahoma, Arial, sans-serif;
+}
+
 #mod-rows-scroll {
   overscroll-behavior: contain;
 }

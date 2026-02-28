@@ -1,13 +1,4 @@
-import React, {
-  CSSProperties,
-  memo,
-  useCallback,
-  useContext,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-} from "react";
+import React, { memo, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import "../index.css";
 import { useAppDispatch, useAppSelector } from "../hooks";
 import {
@@ -33,19 +24,12 @@ import localizationContext from "../localizationContext";
 import { GoGear } from "react-icons/go";
 import ModCustomization from "./ModCustomization";
 import UserFlowOptionsModal from "./UserFlowOptionsModal";
-import { List, CellMeasurerCache, CellMeasurer } from "react-virtualized";
-import { MeasuredCellParent } from "react-virtualized/dist/es/CellMeasurer";
-import { GridCoreProps } from "react-virtualized/dist/es/Grid";
 import { buildCustomizableModsSignature } from "../utility/signatureHelpers";
 import { getDragAutoScrollDelta } from "../utility/dragAutoScroll";
 
 const MemoizedFloatingOverlay = memo(FloatingOverlay);
 
-type ModRowsProps = {
-  scrollElement: HTMLDivElement | null;
-};
-
-const ModRows = memo((props: ModRowsProps) => {
+const ModRows = memo(() => {
   const dispatch = useAppDispatch();
   const filter = useAppSelector((state) => state.app.filter);
   const hiddenMods = useAppSelector((state) => state.app.hiddenMods);
@@ -62,8 +46,6 @@ const ModRows = memo((props: ModRowsProps) => {
   const [isDropdownOpen, setIsDropdownOpen] = useState<boolean>(false);
   const [isFlowOptionsModalOpen, setIsFlowOptionsModalOpen] = useState<boolean>(false);
   const [flowOptionsModSelected, setFlowOptionsModSelected] = useState<Mod | undefined>();
-  const [modsListWidth, setModsListWidth] = useState<number>(0);
-  const [modsListHeight, setModsListHeight] = useState<number>(0);
   // const [modBeingCustomized, setModBeingCustomized] = useState<Mod>();
   const [contextMenuMod, setContextMenuMod] = useState<Mod>();
   const [dropdownReferenceElement, setDropdownReferenceElement] = useState<HTMLDivElement>();
@@ -72,8 +54,6 @@ const ModRows = memo((props: ModRowsProps) => {
 
   const localized: Record<string, string> = useContext(localizationContext);
 
-  const rowsParentRef = useRef<HTMLDivElement>(null);
-  const listRef = useRef<List>(null);
   const draggedModIdRef = useRef<string>("");
   const dragCurrentTargetRef = useRef<Element | null>(null);
   const dragStartTopRef = useRef<number | null>(null);
@@ -462,44 +442,6 @@ const ModRows = memo((props: ModRowsProps) => {
   // eslint-disable-next-line @typescript-eslint/no-empty-function
   const emptyFunc = useCallback(() => {}, []);
 
-  const cache = useMemo(
-    () =>
-      new CellMeasurerCache({
-        fixedWidth: true,
-        defaultHeight: 32,
-        minHeight: 32,
-      }),
-    []
-  );
-
-  useEffect(() => {
-    cache.clearAll();
-    listRef.current?.recomputeRowHeights();
-  }, [visibleMods]);
-
-  useEffect(() => {
-    const scrollElement = props.scrollElement;
-    if (!scrollElement) return;
-
-    const updateSize = () => {
-      const width = Math.max(0, scrollElement.clientWidth);
-      const height = Math.max(0, scrollElement.clientHeight);
-      setModsListWidth((prev) => (prev === width ? prev : width));
-      setModsListHeight((prev) => (prev === height ? prev : height));
-    };
-
-    updateSize();
-
-    const resizeObserver = new ResizeObserver(updateSize);
-    resizeObserver.observe(scrollElement);
-    window.addEventListener("resize", updateSize);
-
-    return () => {
-      resizeObserver.disconnect();
-      window.removeEventListener("resize", updateSize);
-    };
-  }, [props.scrollElement]);
-
   useEffect(() => {
     return () => {
       if (dragScrollRafRef.current != null) {
@@ -512,97 +454,12 @@ const ModRows = memo((props: ModRowsProps) => {
     };
   }, [clearDragUiState]);
 
-  const Row = useCallback(
-    ({
-      index,
-      key,
-      parent,
-      style,
-    }: {
-      index: number;
-      parent: React.Component<GridCoreProps> & MeasuredCellParent;
-      key: string;
-      style: CSSProperties;
-    }) => {
-      const i = index;
-      const mod = visibleMods[i];
-      return mod ? (
-        <CellMeasurer cache={cache} index={index} key={key} parent={parent}>
-          {({ registerChild }) => (
-            <ModRow
-              key={key}
-              {...{
-                style,
-                index: i,
-                gridClass: getGridClass(),
-                mod,
-                onRowHoverStart,
-                onRowHoverEnd,
-                onDrop: isCurrentTabEnabledMods ? onDropMemoized : emptyFunc,
-                onDrag,
-                onDragStart,
-                onDragLeave,
-                onDragEnter,
-                onDragOver,
-                onDragEnd,
-                onModToggled,
-                onModRightClick,
-                onCustomizeModClicked,
-                onCustomizeModRightClick,
-                onFlowOptionsClicked,
-                onRemoveModOrder,
-                sortingType,
-                currentTab,
-                isLast: visibleMods.length == i + 1,
-                isAlwaysEnabled: alwaysEnabledModNames.has(mod.name),
-                isEnabledInMergedMod: mergedModPaths.has(mod.path),
-                registerChild,
-              }}
-            ></ModRow>
-          )}
-        </CellMeasurer>
-      ) : (
-        <></>
-      );
-    },
-    [
-      visibleMods,
-      getGridClass,
-      isCurrentTabEnabledMods,
-      onDropMemoized,
-      emptyFunc,
-      onRowHoverStart,
-      onRowHoverEnd,
-      onDrag,
-      onDragStart,
-      onDragLeave,
-      onDragEnter,
-      onDragOver,
-      onDragEnd,
-      onModToggled,
-      onModRightClick,
-      onCustomizeModClicked,
-      onCustomizeModRightClick,
-      onFlowOptionsClicked,
-      onRemoveModOrder,
-      sortingType,
-      currentTab,
-      alwaysEnabledModNames,
-      mergedModPaths,
-      cache
-    ]
-  );
-
-  const virtualizedListWidth = modsListWidth > 0 ? modsListWidth : 800;
-  const virtualizedListHeight = Math.max(240, modsListHeight - 42);
-
   return (
     <>
       <div
         onDragEnd={onDragEnd}
         className={`dark:text-slate-100 ` + (areThumbnailsEnabled ? "text-lg" : "")}
         id="rowsParent"
-        ref={rowsParentRef}
       >
         <MemoizedFloatingOverlay
           onClick={() => onDropdownOverlayClick()}
@@ -759,28 +616,39 @@ const ModRows = memo((props: ModRowsProps) => {
             </span>
           </div>
 
-          {currentTab == "mods" && (
-            <div style={{ gridColumn: "1 / -1", minWidth: 0, width: "100%" }}>
-              <List
-                ref={listRef}
-                autoHeight={false}
-                height={virtualizedListHeight}
-                width={virtualizedListWidth}
-                // rowHeight={areThumbnailsEnabled ? 112 - 8 : 32}
-                rowHeight={({ index }: { index: number }) =>
-                  areThumbnailsEnabled
-                    ? Math.max(112 - 8, cache.rowHeight({ index }))
-                    : cache.rowHeight({ index })
-                }
-                rowRenderer={Row}
-                estimatedRowSize={areThumbnailsEnabled ? 104 : 32}
-                rowCount={visibleMods.length}
-                overscanRowCount={areThumbnailsEnabled ? 4 : 8}
-                deferredMeasurementCache={cache}
-                style={{ overflowX: "hidden" }}
-              />
-            </div>
-          )}
+          {currentTab == "mods" &&
+            visibleMods.map((mod, i) => (
+              <ModRow
+                key={mod.path}
+                {...{
+                  index: i,
+                  mod,
+                  onRowHoverStart,
+                  onRowHoverEnd,
+                  onDrop: isCurrentTabEnabledMods ? onDropMemoized : emptyFunc,
+                  onDrag,
+                  onDragStart,
+                  onDragLeave,
+                  onDragEnter,
+                  onDragOver,
+                  onDragEnd,
+                  onModToggled,
+                  onModRightClick,
+                  onCustomizeModClicked,
+                  onCustomizeModRightClick,
+                  onFlowOptionsClicked,
+                  onRemoveModOrder,
+                  sortingType,
+                  currentTab,
+                  isLast: visibleMods.length == i + 1,
+                  isAlwaysEnabled: alwaysEnabledModNames.has(mod.name),
+                  isEnabledInMergedMod: mergedModPaths.has(mod.path),
+                  style: {},
+                  gridClass: "row",
+                  registerChild: emptyFunc,
+                }}
+              ></ModRow>
+            ))}
           {currentTab == "enabledMods" &&
             visibleMods.map((mod, i) => (
               <ModRow

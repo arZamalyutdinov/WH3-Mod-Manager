@@ -75,8 +75,6 @@ const App = React.memo(() => {
       });
   }, [currentLanguage]);
 
-  const [scrollElement, setScrollElement] = React.useState<HTMLDivElement | null>(null);
-
   return (
     <LocalizationContext.Provider value={localization}>
       <ErrorBoundary
@@ -94,7 +92,7 @@ const App = React.memo(() => {
                 <LeftSidebar />
               </div>
               <div className="min-w-0 min-h-0 h-full">
-                <Main scrollElement={scrollElement} setScrollElement={setScrollElement} />
+                <Main />
               </div>
             </div>
           </div>

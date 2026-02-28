@@ -290,7 +290,7 @@ const ModRow = memo(
           </label>
         </div>
         <div className="flex place-items-center" onContextMenu={(e) => onModRightClick(e, mod)}>
-          <label className="cursor-pointer" htmlFor={mod.workshopId + "enabled"}>
+          <label className="cursor-pointer" htmlFor={checkboxId}>
             {decodedHumanName}
           </label>
         </div>
@@ -298,7 +298,7 @@ const ModRow = memo(
           onContextMenu={(e) => onModRightClick(e, mod)}
           className={"flex place-items-center grid-area-autohide " + (isAuthorEnabled ? "" : "hidden")}
         >
-          <label className="cursor-pointer" htmlFor={mod.workshopId + "enabled"}>
+          <label className="cursor-pointer" htmlFor={checkboxId}>
             <span className="break-all">{decodedAuthorName}</span>
           </label>
         </div>
@@ -309,7 +309,7 @@ const ModRow = memo(
           <label
             style={{ height: areThumbnailsEnabled ? "28px" : "24px" }}
             className="cursor-pointer"
-            htmlFor={mod.workshopId + "enabled"}
+            htmlFor={checkboxId}
           >
             {timeColumnValue}
           </label>
