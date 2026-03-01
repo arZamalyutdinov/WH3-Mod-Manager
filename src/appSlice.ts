@@ -16,6 +16,7 @@ import { SupportedGames } from "./supportedGames";
 import { packDataStore } from "./components/viewer/packDataStore";
 import { isSupportedLanguage } from "./utility/sharedHelpers";
 import { areCustomizableModsEqual } from "./utility/signatureHelpers";
+import { findModForToggle } from "./utility/modToggle";
 
 const addCategoryByPayload = (state: AppState, payload: AddCategoryPayload) => {
   const { mods, category } = payload;
@@ -390,7 +391,7 @@ const appSlice = createSlice({
     },
     toggleMod: (state: AppState, action: PayloadAction<Mod>) => {
       const inputMod = action.payload;
-      const mod = state.currentPreset.mods.find((mod) => mod.workshopId == inputMod.workshopId);
+      const mod = findModForToggle(state.currentPreset.mods, inputMod);
       if (mod) mod.isEnabled = !mod.isEnabled;
     },
     setIsModEnabled: (state: AppState, action: PayloadAction<SetIsModEnabledPayload>) => {

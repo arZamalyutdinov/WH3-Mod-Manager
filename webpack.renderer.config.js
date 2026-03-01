@@ -1,8 +1,20 @@
-const rules = require("./webpack.rules");
+const baseRules = require("./webpack.rules");
 const plugins = require("./webpack.plugins");
 const path = require("path");
 
 const isProduction = process.argv[process.argv.indexOf("--mode") + 1] === "production";
+
+const rules = baseRules.filter((rule) => {
+  const uses = Array.isArray(rule.use) ? rule.use : rule.use ? [rule.use] : [];
+  const loaders = uses
+    .map((use) => (typeof use === "string" ? use : use?.loader))
+    .filter((loader) => typeof loader === "string");
+
+  // Keep native relocation/node-loader only in main-process build.
+  return !loaders.some(
+    (loader) => loader.includes("@vercel/webpack-asset-relocator-loader") || loader.includes("node-loader"),
+  );
+});
 
 rules.push(
   {

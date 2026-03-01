@@ -40,6 +40,12 @@ if (!gotTheLock) {
 } else {
   app.commandLine.appendSwitch("js-flags", "--max-old-space-size=12288");
 
+  if (process.platform === "win32" && app.isPackaged && !isDev) {
+    // Prefer grayscale text rasterization in packaged Windows builds to avoid LCD subpixel artifacts.
+    app.commandLine.appendSwitch("disable-font-subpixel-positioning");
+    app.commandLine.appendSwitch("disable-lcd-text");
+  }
+
   console.log("ARGVS:", process.argv);
   appData.startArgs = process.argv.slice(1);
 
@@ -48,8 +54,14 @@ if (!gotTheLock) {
     console.log("isAdmin:", appData.isAdmin);
   });
 
-  if (process.argv.find((arg) => arg == "-nogpu")) {
-    console.log("DISABLED HARDWARE ACCELERATION");
+  const shouldDisableGpuForPackagedWindows = process.platform === "win32" && app.isPackaged && !isDev;
+  const shouldDisableGpuFromArgs = process.argv.find((arg) => arg == "-nogpu");
+  if (shouldDisableGpuForPackagedWindows || shouldDisableGpuFromArgs) {
+    if (shouldDisableGpuForPackagedWindows) {
+      console.log("DISABLED HARDWARE ACCELERATION for packaged Windows build");
+    } else {
+      console.log("DISABLED HARDWARE ACCELERATION via -nogpu");
+    }
     app.disableHardwareAcceleration();
   }
 
@@ -136,6 +148,10 @@ if (!gotTheLock) {
   };
 
   const createWindow = (): void => {
+    console.log(
+      `createWindow: app.isPackaged=${app.isPackaged}, isDev=${isDev}, entry=${MAIN_WINDOW_WEBPACK_ENTRY}`
+    );
+
     i18n.on("loaded", async () => {
       // Get the OS locale and check if it's supported
       const osLocale = app.getLocale();
@@ -185,6 +201,26 @@ if (!gotTheLock) {
     });
 
     mainWindowState.manage(windows.mainWindow);
+
+    windows.mainWindow.webContents.on("console-message", (_event, level, message, line, sourceId) => {
+      if (isDev) {
+        console.log(`renderer-console[level=${level}] ${message} (${sourceId}:${line})`);
+        return;
+      }
+
+      // Keep packaged logs focused: mirror renderer warnings/errors only.
+      if (level >= 2) {
+        console.log(`renderer-console[level=${level}] ${message} (${sourceId}:${line})`);
+      }
+    });
+
+    windows.mainWindow.webContents.on("did-start-loading", () => {
+      console.log("mainWindow did-start-loading");
+    });
+
+    windows.mainWindow.webContents.on("did-finish-load", () => {
+      console.log("mainWindow did-finish-load");
+    });
 
     // and load the index.html of the app.
     windows.mainWindow.loadURL(MAIN_WINDOW_WEBPACK_ENTRY);
@@ -591,21 +627,25 @@ if (!gotTheLock) {
   app.on("ready", createWindow);
 
   app.whenReady().then(() => {
-    installExtension(REACT_DEVELOPER_TOOLS, {
-      loadExtensionOptions: {
-        allowFileAccess: true,
-      },
-    })
-      .then((name) => console.log(`Added Extension:  ${name}`))
-      .catch((err) => console.log("An error occurred: ", err));
+    if (isDev && !app.isPackaged) {
+      installExtension(REACT_DEVELOPER_TOOLS, {
+        loadExtensionOptions: {
+          allowFileAccess: true,
+        },
+      })
+        .then((name) => console.log(`Added Extension:  ${name}`))
+        .catch((err) => console.log("An error occurred: ", err));
 
-    installExtension(REDUX_DEVTOOLS, {
-      loadExtensionOptions: {
-        allowFileAccess: true,
-      },
-    })
-      .then((name) => console.log(`Added Extension:  ${name}`))
-      .catch((err) => console.log("An error occurred: ", err));
+      installExtension(REDUX_DEVTOOLS, {
+        loadExtensionOptions: {
+          allowFileAccess: true,
+        },
+      })
+        .then((name) => console.log(`Added Extension:  ${name}`))
+        .catch((err) => console.log("An error occurred: ", err));
+    } else {
+      console.log("Skipping devtools extension install for packaged/non-dev run");
+    }
   });
 
   app.on("before-quit", () => {

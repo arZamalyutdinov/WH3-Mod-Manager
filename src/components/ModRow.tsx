@@ -1,14 +1,13 @@
 import { faCamera, faEraser, faFileArchive, faGrip } from "@fortawesome/free-solid-svg-icons";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import React, { CSSProperties, memo, useCallback, useContext, useMemo } from "react";
-import { useAppSelector } from "../hooks";
 import { Tooltip } from "flowbite-react";
 import classNames from "classnames";
 import { formatDistanceToNow } from "date-fns";
 import { isSubbedTimeSort, SortingType } from "../utility/modRowSorting";
 import localizationContext from "../localizationContext";
 import { Icons } from "./icons";
-import { CellMeasurerChildProps } from "react-virtualized/dist/es/CellMeasurer";
+import { getModCheckboxId, isModEffectivelyEnabled } from "../utility/modRowHelpers";
 
 const FontAwesomeIconMemo = memo(FontAwesomeIcon);
 
@@ -35,9 +34,14 @@ type ModRowProps = {
   sortingType: SortingType;
   currentTab: MainWindowTab;
   isLast: boolean;
-  style: CSSProperties;
+  style?: CSSProperties;
   gridClass: string;
-  registerChild: CellMeasurerChildProps["registerChild"];
+  areThumbnailsEnabled: boolean;
+  isDev: boolean;
+  isAuthorEnabled: boolean;
+  hasDbCustomizations: boolean;
+  hasFlowOptions: boolean;
+  hasPackDataOverwrite: boolean;
 };
 
 const domParser = new DOMParser();
@@ -80,14 +84,13 @@ const ModRow = memo(
     onCustomizeModRightClick,
     onFlowOptionsClicked,
     gridClass,
-    registerChild,
+    areThumbnailsEnabled,
+    isDev,
+    isAuthorEnabled,
+    hasDbCustomizations,
+    hasFlowOptions,
+    hasPackDataOverwrite,
   }: ModRowProps) => {
-    const areThumbnailsEnabled = useAppSelector((state) => state.app.areThumbnailsEnabled);
-    const isDev = useAppSelector((state) => state.app.isDev);
-    const isAuthorEnabled = useAppSelector((state) => state.app.isAuthorEnabled);
-    const customizableMods = useAppSelector((state) => state.app.customizableMods);
-    const packDataOverwrites = useAppSelector((state) => state.app.packDataOverwrites);
-
     const getGhostClass = useCallback(() => {
       if (isAuthorEnabled && areThumbnailsEnabled) return "grid-column-8";
       if (isAuthorEnabled) return "grid-column-7";
@@ -123,11 +126,14 @@ const ModRow = memo(
 
     const decodedHumanName = useMemo(() => decodeHTML(decodeHTML(mod.humanName) ?? ""), [mod.humanName]);
     const decodedAuthorName = useMemo(() => decodeHTML(decodeHTML(mod.author) ?? ""), [mod.author]);
+    const checkboxId = getModCheckboxId(mod);
+    const checkboxChecked = isModEffectivelyEnabled(mod, isAlwaysEnabled);
 
     return (
       <div
-        className={`relative grid row-div-paddings row-hover-highlight ${gridClass}`}
-        key={mod.name}
+        className={`relative grid mod-row row-div-paddings row-hover-highlight ${gridClass} ${
+          areThumbnailsEnabled ? "mod-row-thumbs" : "mod-row-compact"
+        }`}
         onMouseEnter={(e) => onRowHoverStart(e)}
         onMouseLeave={(e) => onRowHoverEnd(e)}
         onDrop={(e) => onDrop(e)}
@@ -138,7 +144,6 @@ const ModRow = memo(
         id={mod.name}
         data-load-order={mod.loadOrder}
         style={style}
-        ref={registerChild}
       >
         <div onDrop={(e) => onDrop(e)} className={"drop-ghost h-10 hidden " + getGhostClass()}></div>
         <div className="flex justify-center items-center" onContextMenu={() => onRemoveModOrder(mod)}>
@@ -183,16 +188,11 @@ const ModRow = memo(
             className={"grid place-items-center h-full " + (areThumbnailsEnabled ? "bigger-checkbox" : "")}
           >
             <input
-              style={
-                (isAlwaysEnabled && {
-                  color: "#6D28D9",
-                }) ||
-                {}
-              }
+              className={`mod-enabled-checkbox ${isAlwaysEnabled ? "mod-enabled-checkbox-always" : ""}`}
               type="checkbox"
               name={mod.workshopId}
-              id={mod.workshopId + "enabled"}
-              checked={mod.isEnabled}
+              id={checkboxId}
+              checked={checkboxChecked}
               onChange={() => onModToggled(mod)}
             ></input>
           </form>
@@ -201,7 +201,7 @@ const ModRow = memo(
           onContextMenu={(e) => onModRightClick(e, mod)}
           className={"flex place-items-center grid-area-autohide " + (areThumbnailsEnabled ? "" : "hidden")}
         >
-          <label className="cursor-pointer" htmlFor={mod.workshopId + "enabled"}>
+          <label className="cursor-pointer" htmlFor={checkboxId}>
             {areThumbnailsEnabled && (
               <img
                 className="max-w-[6rem] aspect-square"
@@ -211,10 +211,7 @@ const ModRow = memo(
           </label>
         </div>
         <div className="flex place-items-center w-min-[0px]" onContextMenu={(e) => onModRightClick(e, mod)}>
-          <label
-            className="max-w-full inline-block break-words cursor-pointer"
-            htmlFor={mod.workshopId + "enabled"}
-          >
+          <label className="max-w-full inline-block break-words cursor-pointer" htmlFor={checkboxId}>
             <span
               className={classNames("break-all", "flex", "items-center", {
                 ["text-orange-500"]: mod.isInData && !mod.isSymbolicLink,
@@ -293,7 +290,7 @@ const ModRow = memo(
           </label>
         </div>
         <div className="flex place-items-center" onContextMenu={(e) => onModRightClick(e, mod)}>
-          <label className="cursor-pointer" htmlFor={mod.workshopId + "enabled"}>
+          <label className="cursor-pointer" htmlFor={checkboxId}>
             {decodedHumanName}
           </label>
         </div>
@@ -301,7 +298,7 @@ const ModRow = memo(
           onContextMenu={(e) => onModRightClick(e, mod)}
           className={"flex place-items-center grid-area-autohide " + (isAuthorEnabled ? "" : "hidden")}
         >
-          <label className="cursor-pointer" htmlFor={mod.workshopId + "enabled"}>
+          <label className="cursor-pointer" htmlFor={checkboxId}>
             <span className="break-all">{decodedAuthorName}</span>
           </label>
         </div>
@@ -312,31 +309,29 @@ const ModRow = memo(
           <label
             style={{ height: areThumbnailsEnabled ? "28px" : "24px" }}
             className="cursor-pointer"
-            htmlFor={mod.workshopId + "enabled"}
+            htmlFor={checkboxId}
           >
             {timeColumnValue}
           </label>
         </div>
         <div className="flex place-items-center justify-center gap-2">
-          {customizableMods[mod.path] &&
-            customizableMods[mod.path].some((file) => file.startsWith("db\\")) && (
+          {hasDbCustomizations && (
               <Icons.Gear
                 onClick={(e) => {
                   onCustomizeModClicked(e, mod);
                 }}
                 onContextMenu={(e) => onCustomizeModRightClick(e, mod)}
                 className="bigger-gear-icon cursor-pointer transition-all duration-200 hover:opacity-70 hover:scale-110"
-                color={(packDataOverwrites[mod.path] && "#1c64f2") || "white"}
+                color={(hasPackDataOverwrite && "#1c64f2") || "white"}
               />
             )}
-          {customizableMods[mod.path] &&
-            customizableMods[mod.path].some((file) => file.startsWith("whmmflows\\")) && (
+          {hasFlowOptions && (
               <Icons.SettingsKnobs
                 onClick={(e) => {
                   onFlowOptionsClicked(e, mod);
                 }}
                 className="bigger-gear-icon cursor-pointer transition-all duration-200 hover:opacity-70 hover:scale-110"
-                color={(packDataOverwrites[mod.path] && "#1c64f2") || "white"}
+                color={(hasPackDataOverwrite && "#1c64f2") || "white"}
               />
             )}
         </div>

@@ -1,5 +1,4 @@
 import "./index.css";
-import "./app";
 import log from "electron-log/renderer";
 import {
   setMods,
@@ -54,6 +53,7 @@ import { dataFromBackend, doneRequests, packDataStore } from "@/src/components/v
 import { tableNameWithDBPrefix } from "@/src/utility/packFileHelpers";
 import { buildConfigSaveSignature, buildReadModsSignature, getReadModsSelection } from "./rendererConfigSync";
 import { buildCustomizableModsSignature, buildStringArraySignature } from "./utility/signatureHelpers";
+import { shouldIgnoreWindowError } from "./rendererErrorFilter";
 
 console.log("IN RENDERER");
 
@@ -85,14 +85,39 @@ console.log = (...args) => {
 console.log(`isMain: ${isMain}, isViewer: ${isViewer}, isSkills: ${isSkills}`);
 
 window.addEventListener("error", (e) => {
+  const message = e.error instanceof Error ? e.error.message : e.message || "";
+  if (shouldIgnoreWindowError(message)) {
+    // This browser warning is noisy and non-fatal; suppress it so it doesn't flood logs.
+    e.preventDefault();
+    return;
+  }
+
   const error = e.error instanceof Error ? e.error.stack || e.error.message : `${e.message}`;
   log.error("Unhandled renderer error:", error);
-  console.log(e);
 });
 
 window.addEventListener("unhandledrejection", (e) => {
   const reason = e.reason instanceof Error ? e.reason.stack || e.reason.message : String(e.reason);
   log.error("Unhandled renderer rejection:", reason);
+});
+
+const renderBootstrapError = (title: string, details: string) => {
+  const root = document.getElementById("root");
+  if (!root) return;
+
+  root.innerHTML = `
+    <div style="padding:16px;color:#b91c1c;font-family:monospace;">
+      <h2 style="margin:0 0 8px 0;">${title}</h2>
+      <pre style="white-space:pre-wrap;margin:0;">${details}</pre>
+    </div>
+  `;
+};
+
+void import("./app").catch((error: unknown) => {
+  const errorMessage = error instanceof Error ? error.stack || error.message : String(error);
+  log.error("Failed to bootstrap renderer app:", errorMessage);
+  console.error("Failed to bootstrap renderer app:", error);
+  renderBootstrapError("Renderer bootstrap failed", errorMessage);
 });
 
 window.api?.handleLog((event, msg) => {

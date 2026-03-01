@@ -1,6 +1,7 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+@config "../tailwind.config.js";
+@import "tailwindcss";
+@source "./**/*.{js,jsx,ts,tsx,html}";
+@source "../node_modules/flowbite-react/**/*.{js,jsx,ts,tsx}";
 
 /* latin-ext */
 @font-face {
@@ -225,16 +226,71 @@ body {
   transform: scale(1);
 }
 
+.mod-enabled-checkbox {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 18px;
+  height: 18px;
+  border-radius: 4px;
+  border: 2px solid #94a3b8;
+  background-color: #0f172a;
+  cursor: pointer;
+  display: inline-block;
+  background-repeat: no-repeat;
+  background-position: center;
+  background-size: 12px 12px;
+  transition:
+    background-color 120ms ease,
+    border-color 120ms ease,
+    box-shadow 120ms ease;
+}
+
+.mod-enabled-checkbox:checked {
+  background-color: #16a34a;
+  border-color: #bbf7d0;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M13.8 3.3a1 1 0 0 1 0 1.4L6.7 11.8a1 1 0 0 1-1.4 0L2.2 8.7a1 1 0 1 1 1.4-1.4L6 9.7l6.4-6.4a1 1 0 0 1 1.4 0z' fill='%230b1020'/%3E%3C/svg%3E");
+}
+
+.mod-enabled-checkbox:not(:checked) {
+  background-image: none;
+}
+
+.mod-enabled-checkbox:hover {
+  border-color: #e2e8f0;
+}
+
+.mod-enabled-checkbox:focus-visible {
+  outline: 2px solid #facc15;
+  outline-offset: 2px;
+}
+
+.mod-enabled-checkbox-always {
+  border-color: #a78bfa;
+  box-shadow:
+    inset 0 1px 1px rgba(255, 255, 255, 0.08),
+    0 0 0 1px rgba(124, 58, 237, 0.45);
+}
+
+.mod-enabled-checkbox-always:checked {
+  background-color: #7c3aed;
+  border-color: #ddd6fe;
+}
+
 .drop-ghost {
   border: 3px dotted #666;
   width: 100%;
 }
 
-.row {
-  display: contents;
+.mod-row {
+  content-visibility: auto;
+  contain-intrinsic-size: 40px;
 }
 
-.row-div-paddings div {
+.mod-row-thumbs {
+  contain-intrinsic-size: 104px;
+}
+
+.row-div-paddings > div {
   padding: 0.25rem;
 }
 
@@ -242,11 +298,8 @@ body {
   background-color: #525252;
 }
 
-body:not(.disable-row-hover) .row-hover-highlight:hover div:not(.drop-ghost) {
-  background-color: #525252;
-}
-
 body:not(.disable-row-hover) .row-hover-highlight:hover > div:not(.drop-ghost) {
+  background-color: #525252;
   box-shadow: inset 0 1px 0 rgba(148, 163, 184, 0.25);
 }
 
@@ -280,10 +333,14 @@ body:not(.disable-row-hover) .row-hover-highlight:hover > div:not(.drop-ghost) {
   z-index: 11;
 }
 
+#modsGrid,
+#modsGrid * {
+  text-shadow: none !important;
+  font-family: "Segoe UI", Tahoma, Arial, sans-serif;
+}
+
 #mod-rows-scroll {
   overscroll-behavior: contain;
-  will-change: scroll-position;
-  transform: translateZ(0);
 }
 
 #top-bar {
@@ -392,9 +449,12 @@ body:not(.disable-row-hover) .row-hover-highlight:hover > div:not(.drop-ghost) {
   position: sticky;
   top: 0;
   z-index: 40;
+  width: 100%;
+  min-width: 0;
   height: calc(100vh - 3.5rem);
   max-height: calc(100vh - 3.5rem);
   overflow-y: auto;
+  overflow-x: hidden;
   display: flex;
   flex-direction: column;
   scrollbar-gutter: stable;
@@ -415,7 +475,7 @@ body:not(.disable-row-hover) .row-hover-highlight:hover > div:not(.drop-ghost) {
   border-top: 1px solid rgba(148, 163, 184, 0.35);
 }
 
-@media (max-width: 1279px) {
+@media (max-width: 767px) {
   .sidebar-shell {
     position: relative;
     top: 0;

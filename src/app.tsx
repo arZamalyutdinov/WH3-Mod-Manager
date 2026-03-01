@@ -75,8 +75,6 @@ const App = React.memo(() => {
       });
   }, [currentLanguage]);
 
-  const [scrollElement, setScrollElement] = React.useState<HTMLDivElement | null>(null);
-
   return (
     <LocalizationContext.Provider value={localization}>
       <ErrorBoundary
@@ -89,12 +87,12 @@ const App = React.memo(() => {
         {(window.location.pathname.includes("/main_window") && (
           <div className="mx-auto h-[calc(100vh-28px)] px-2 pb-3 pt-3 md:px-4">
             <Onboarding></Onboarding>
-            <div className="mx-auto grid h-full min-h-0 max-w-[124rem] grid-cols-1 grid-rows-[minmax(0,1fr)] gap-4 xl:grid-cols-[15rem_minmax(0,1fr)]">
-              <div className="min-w-0 xl:self-start">
+            <div className="mx-auto grid h-full min-h-0 max-w-[124rem] grid-cols-1 grid-rows-[minmax(0,1fr)] gap-4 md:grid-cols-[clamp(9.5rem,14vw,15rem)_minmax(0,1fr)]">
+              <div className="min-w-0 md:self-start">
                 <LeftSidebar />
               </div>
               <div className="min-w-0 min-h-0 h-full">
-                <Main scrollElement={scrollElement} setScrollElement={setScrollElement} />
+                <Main />
               </div>
             </div>
           </div>

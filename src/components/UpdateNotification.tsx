@@ -1,4 +1,3 @@
-import { Button, Toast, ToastToggle } from "flowbite-react";
 import React, { memo, useCallback, useContext } from "react";
 import localizationContext from "../localizationContext";
 import { useDispatch } from "react-redux";
@@ -36,30 +35,38 @@ export const UpdateNotification = memo(
     const localized: Record<string, string> = useContext(localizationContext);
 
     return (
-      <Toast>
-        <div className="flex !items-start">
-          <div className="ml-3 text-sm font-normal">
-            <span className="mb-1 text-sm font-semibold text-gray-900 dark:text-white">
-              {localized.updateAvailable}
-            </span>
-            <div className="mb-4 text-sm font-normal">{localized.newVersionAvailable}</div>
-            {releaseNotesURL && releaseNotesURL != "" && (
-              <a
-                onClick={onReleaseNotesClick}
-                className="mb-4 block text-sm text-gray-900 dark:text-white dark:hover:text-blue-500 cursor-pointer"
-              >
-                {localized.releaseNotes}
-              </a>
-            )}
-            <div className="flex gap-2 w-full">
-              <Button size="sm" onClick={onDownloadClick}>
-                {localized.download}
-              </Button>
-            </div>
+      <div className="relative w-full rounded-lg border border-slate-600 bg-slate-900/95 p-4 text-slate-100 shadow-xl">
+        <button
+          type="button"
+          aria-label="Close update notification"
+          onClick={() => setIsUpdateAvailable(false)}
+          className="absolute right-2 top-2 rounded p-1 text-slate-400 transition-colors hover:bg-slate-800 hover:text-white"
+        >
+          x
+        </button>
+        <div className="pr-6">
+          <div className="mb-1 text-sm font-semibold">{localized.updateAvailable}</div>
+          <div className="mb-3 text-sm text-slate-300">{localized.newVersionAvailable}</div>
+          {releaseNotesURL && releaseNotesURL != "" && (
+            <button
+              type="button"
+              onClick={onReleaseNotesClick}
+              className="mb-3 block text-left text-sm text-blue-300 underline hover:text-blue-200"
+            >
+              {localized.releaseNotes}
+            </button>
+          )}
+          <div className="flex w-full gap-2">
+            <button
+              type="button"
+              onClick={onDownloadClick}
+              className="w-full rounded-md border border-blue-500 bg-blue-600 px-3 py-2 text-sm font-semibold text-white transition-colors hover:bg-blue-500"
+            >
+              {localized.download}
+            </button>
           </div>
-          <ToastToggle />
         </div>
-      </Toast>
+      </div>
     );
   }
 );
